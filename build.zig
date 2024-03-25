@@ -16,11 +16,16 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const exe = b.addExecutable(.{
-        .name = "raylib-zig-template",
+        .name = "block-miner",
         .root_source_file = .{ .path = "src/main.zig" },
         .target = target,
         .optimize = optimize,
     });
+
+    const raylib_zig = b.addModule("raylib_zig", .{
+        .source_file = .{ .path = "raylib-zig/src/main.zig" },
+    });
+    exe.addModule("raylib_zig", raylib_zig);
 
     exe.linkSystemLibrary("raylib");
     exe.linkSystemLibrary("c");

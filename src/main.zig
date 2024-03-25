@@ -1,9 +1,8 @@
 // TODO: change collision to check 3 blocks in a rectangle at a time.
 const std = @import("std");
 const print = std.debug.print;
-const rl = @import("raylib.zig");
-const utils = @import("utils.zig");
-const cast = utils.cast;
+const rl = @import("raylib_zig");
+const cast = rl.utils.cast;
 const Vector2 = rl.Vector2;
 
 const BACKGROUND_COLOR = rl.Color.init(40, 40, 40, 255);
