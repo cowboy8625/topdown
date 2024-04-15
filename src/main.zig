@@ -344,7 +344,7 @@ fn get_top_left_coner_of_grid_on_screen(player: rl.Vector2(i32), screen: rl.Vect
 
 fn get_direction(point: rl.Vector2(f32), cursor: *const rl.Vector2(f32), camera: *rl.Camera2D) rl.Vector2(f32) {
     const world_space_cursor = rl.GetScreenToWorld2D(cursor.*, camera.*);
-    const radians = std.math.atan2(f32, world_space_cursor.y - point.y, world_space_cursor.x - point.x);
+    const radians = std.math.atan2(world_space_cursor.y - point.y, world_space_cursor.x - point.x);
     return .{ .x = std.math.cos(radians), .y = std.math.sin(radians) };
 }
 
@@ -359,7 +359,7 @@ fn draw_player(cursor: *const rl.Vector2(f32), player: *Player, camera: *rl.Came
     _ = rect;
     const origin = rl.Vector2(f32).init(16, 16);
     _ = origin;
-    const radians = std.math.atan2(f32, world_space_cursor.y - pos.y, world_space_cursor.x - pos.x);
+    const radians = std.math.atan2(world_space_cursor.y - pos.y, world_space_cursor.x - pos.x);
     var rotation = radians * 180.0 / std.math.pi;
     if (rotation < 0) {
         rotation += 360.0;
