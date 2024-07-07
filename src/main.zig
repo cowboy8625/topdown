@@ -31,34 +31,102 @@ const State = struct {
 };
 
 const Player = struct {
+    const Self = @This();
     const CENTER: rl.Vector2(f32) = CUBE.as(f32).divFromNum(2);
+    current_pos: rl.Vector2(i32),
+    animation: ?Animation = null,
 
-    pos: rl.Vector2(i32),
-    dir: rl.Vector2(f32),
-    vel: rl.Vector2(f32),
-    speed: f32 = 10,
-    friction: f32 = 0.2,
-    max_vel: rl.Vector2(f32) = .{ .x = 5, .y = 5 },
-    radius: f32 = CELL_SIZE / 2,
-
-    fn init() Player {
+    fn init() Self {
         return .{
-            .pos = .{ .x = 0, .y = 0 },
-            .dir = .{ .x = 0, .y = 0 },
-            .vel = .{ .x = 0, .y = 0 },
+            .current_pos = .{ .x = 0, .y = 0 },
+            .animation = null,
         };
     }
 
-    // pub fn get_pos_on_grid(self: *const Player) Vector2(i32) {
-    //     return get_grid_pos(f32, self.center(), CUBE.as(f32));
-    // }
-    //
-    // pub fn get_pos_snap_to_grid(self: *const Player) Vector2(f32) {
-    //     return self.pos.div(CUBE.as(f32)).mul(CUBE.as(f32));
-    // }
+    pub fn getWorldPos(self: *const Self) rl.Vector2(f32) {
+        if (self.animation) |animation| {
+            return animation.current;
+        }
+        return get_world_pos_from_grid(i32, self.current_pos, CUBE);
+    }
 
-    pub fn center(self: *const Player) Vector2(f32) {
-        return self.pos.mul(CUBE).as(f32).add(Player.CENTER);
+    pub fn move(self: *Self, dir: rl.Vector2(i32)) void {
+        if (dir.isZero()) return;
+        const start = self.current_pos;
+        const end = self.current_pos.add(dir);
+        const world_start = start.mul(CUBE).as(f32);
+        const world_end = end.mul(CUBE).as(f32);
+        self.startAnimation(world_start, world_end, 0.2);
+        self.current_pos = end;
+    }
+
+    pub fn center(self: *const Self) Vector2(f32) {
+        return self.current_pos.mul(CUBE).as(f32).add(Self.CENTER);
+    }
+
+    pub fn startAnimation(self: *Self, start: rl.Vector2(f32), end: rl.Vector2(f32), duration: f32) void {
+        self.animation = Animation{
+            .start = start,
+            .end = end,
+            .current = start,
+            .time = 0.0,
+            .elapsedTime = 0.0,
+            .duration = duration,
+        };
+    }
+
+    pub fn isAnimating(self: *const Self) bool {
+        return self.animation != null;
+    }
+
+    pub fn update(self: *Self, deltaTime: f32) void {
+        if (self.animation) |*animation| {
+            if (animation.isDone()) {
+                self.animation = null;
+                return;
+            }
+            animation.update(deltaTime);
+            return;
+        }
+    }
+
+    pub fn draw(self: Self) void {
+        if (self.animation) |_| {
+            const pos = self.getWorldPos();
+            rl.DrawRectangleV(pos, CUBE.as(f32), rl.Color.red());
+            return;
+        }
+
+        const pos = get_world_pos_from_grid(i32, self.current_pos, CUBE);
+        rl.DrawRectangleV(pos, CUBE.as(f32), rl.Color.red());
+    }
+};
+
+const Animation = struct {
+    const Self = @This();
+    start: rl.Vector2(f32),
+    end: rl.Vector2(f32),
+    current: rl.Vector2(f32),
+    time: f32,
+    elapsedTime: f32,
+    duration: f32,
+
+    fn isDone(self: Self) bool {
+        return self.elapsedTime >= self.duration;
+    }
+
+    fn update(self: *Self, deltaTime: f32) void {
+        self.elapsedTime += deltaTime; // Update the elapsed time
+
+        var interpolationFactor = self.elapsedTime / self.duration;
+
+        if (interpolationFactor > 1.0) {
+            interpolationFactor = 1.0;
+        }
+
+        // Linear interpolation (LERP)
+        self.current.x = self.start.x + interpolationFactor * (self.end.x - self.start.x);
+        self.current.y = self.start.y + interpolationFactor * (self.end.y - self.start.y);
     }
 };
 
@@ -77,9 +145,6 @@ pub fn main() !void {
     rl.SetExitKey(rl.KeyboardKey.NULL);
 
     // INIT
-    const collision_cords_buffer: []?rl.Vector2(i32) = try allocator.alloc(?rl.Vector2(i32), POINT_BUFFER_SIZE);
-    defer allocator.free(collision_cords_buffer);
-    @memset(collision_cords_buffer, null);
     const display_cords_buffer: []u8 = try allocator.alloc(u8, TEXT_BUFFER_SIZE);
     defer allocator.free(display_cords_buffer);
     var block_map = BlockMap.init(allocator);
@@ -103,10 +168,10 @@ pub fn main() !void {
         // UPDATE
         const cursor = rl.GetMousePosition();
         try keyboard_update(&cursor, &state, &player, &camera, &block_map, &mangaled);
-        try update_world(screen_width, screen_height, player.pos, &block_map, &mangaled);
-        update(&state, &player, &block_map, collision_cords_buffer);
+        try update_world(screen_width, screen_height, player.current_pos, &block_map, &mangaled);
+        update(&state, &player, &block_map);
 
-        camera.target = player.pos.mul(CUBE).asRaylibVector2();
+        camera.target = player.getWorldPos().asRaylibVector2();
         rl.BeginDrawing();
         defer rl.EndDrawing();
         rl.ClearBackground(BACKGROUND_COLOR);
@@ -123,19 +188,17 @@ pub fn main() !void {
             &block_map,
             screen_width,
             screen_height,
-            collision_cords_buffer,
         );
-        @memset(collision_cords_buffer, null);
     }
 }
 
-fn update(state: *State, player: *Player, block_map: *BlockMap, block_buffer: []?rl.Vector2(i32)) void {
-    _ = block_buffer;
+fn update(state: *State, player: *Player, block_map: *BlockMap) void {
     _ = block_map;
-    _ = player;
+    const deltaTime = rl.GetFrameTime();
     switch (state.mode) {
         .Game => {
             // apply_velocity_to(player, block_map, block_buffer);
+            player.update(deltaTime);
         },
         .Pause => {},
         .Menu => {},
@@ -252,8 +315,8 @@ fn keyboard_update_game(
         dir.y += 1;
     } else {}
 
-    if (!is_collision(player.pos, dir, block_map)) {
-        player.pos = player.pos.add(dir);
+    if (!is_collision(player.current_pos, dir, block_map) and !player.isAnimating()) {
+        player.move(dir);
     }
 
     if (rl.IsKeyPressed(rl.KeyboardKey.ESCAPE)) {
@@ -264,7 +327,7 @@ fn keyboard_update_game(
     if (rl.IsMouseButtonPressed(rl.MouseButton.Left)) {
         const world_mouse_pos = rl.GetScreenToWorld2D(cursor.*, camera.*);
         const block_pos = get_grid_pos(f32, world_mouse_pos, CUBE.as(f32));
-        if (block_pos.eq(player.pos)) return;
+        if (block_pos.eq(player.current_pos)) return;
         try mangaled.put(block_pos.as(i32), .Stone);
     }
 
@@ -272,7 +335,7 @@ fn keyboard_update_game(
     if (rl.IsMouseButtonPressed(rl.MouseButton.Right)) {
         const world_mouse_pos = rl.GetScreenToWorld2D(cursor.*, camera.*);
         const block_pos = get_grid_pos(f32, world_mouse_pos, CUBE.as(f32));
-        if (block_pos.eq(player.pos)) return;
+        if (block_pos.eq(player.current_pos)) return;
         _ = mangaled.remove(block_pos.as(i32));
     }
 }
@@ -292,12 +355,10 @@ fn draw(
     block_map: *BlockMap,
     screen_width: i32,
     screen_height: i32,
-    block_buffer: []?Vector2(i32),
 ) !void {
-    _ = block_buffer;
     _ = screen_height;
     _ = screen_width;
-    draw_player(cursor, player, camera);
+    player.draw();
     draw_placed_blocks(block_map);
     // draw_grid(player, camera, screen_width, screen_height);
     // PAUSE MENU
@@ -344,13 +405,6 @@ fn draw_block(pos: rl.Vector2(i32), color: rl.Color) void {
     rl.DrawRectangleV(pos.mul(CUBE).as(f32), CUBE.as(f32), color);
 }
 
-fn draw_player(cursor: *const rl.Vector2(f32), player: *Player, camera: *rl.Camera2D) void {
-    const world_space_cursor = rl.GetScreenToWorld2D(cursor.*, camera.*);
-    const pos = player.pos.mul(CUBE).as(f32);
-    rl.DrawRectangleV(pos, CUBE.as(f32), rl.Color.red());
-    rl.DrawLineV(player.center(), world_space_cursor, rl.Color.yellow());
-}
-
 fn draw_placed_blocks(block_map: *BlockMap) void {
     var iter = block_map.iterator();
     while (iter.next()) |entry| {
@@ -369,7 +423,7 @@ fn draw_info(
     // -------Position---------
     const ui_pos = Vector2(f32).init(30, 10);
     const offset = rl.GetScreenToWorld2D(ui_pos, camera.*).as(i32);
-    const display_cords = try std.fmt.bufPrintZ(buffer[0..], "pos: x: {d} y: {d}", .{ player.pos.x, player.pos.y });
+    const display_cords = try std.fmt.bufPrintZ(buffer[0..], "pos: x: {d} y: {d}", .{ player.current_pos.x, player.current_pos.y });
     rl.DrawText(display_cords, offset.x, offset.y, 30, UI_TEXT_COLOR);
     // ----Cursor Position-----
     const screen_mouse = rl.GetScreenToWorld2D(cursor.*, camera.*).as(i32);
@@ -386,7 +440,7 @@ fn draw_grid(player: *Player, camera: *rl.Camera2D, width: i32, height: i32) voi
         @mod(camera.offset.x, CELL_SIZE) - CELL_SIZE,
         @mod(camera.offset.y, CELL_SIZE) - CELL_SIZE,
     );
-    const player_offset = player.pos.sub(player.get_pos_snap_to_grid()).as(i32);
+    const player_offset = player.current_pos.sub(player.get_pos_snap_to_grid()).as(i32);
     const offset = rl.GetScreenToWorld2D(pos.mul(CUBE), camera.*).as(i32);
     var x: i32 = 0;
     while (x < width + CELL_SIZE) : (x += CELL_SIZE) {
