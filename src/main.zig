@@ -4,14 +4,10 @@ const print = std.debug.print;
 const rl = @import("raylib_zig");
 const cast = rl.utils.cast;
 const Vector2 = rl.Vector2;
+const Player = @import("Player.zig");
+const Interpolation = @import("Interpolation.zig");
+const CONSTANTS = @import("constants.zig");
 
-const BACKGROUND_COLOR = rl.Color.init(40, 40, 40, 255);
-const GRID_COLOR = rl.Color.black();
-const UI_TEXT_COLOR = rl.Color.rayWhite();
-const TEXT_BUFFER_SIZE = 256;
-const POINT_BUFFER_SIZE = 9;
-const CELL_SIZE = 32;
-const CUBE: Vector2(i32) = .{ .x = CELL_SIZE, .y = CELL_SIZE };
 const BlockType = enum {
     Stone,
 
@@ -30,106 +26,6 @@ const State = struct {
     mode: Mode,
 };
 
-const Player = struct {
-    const Self = @This();
-    const CENTER: rl.Vector2(f32) = CUBE.as(f32).divFromNum(2);
-    current_pos: rl.Vector2(i32),
-    animation: ?Animation = null,
-
-    fn init() Self {
-        return .{
-            .current_pos = .{ .x = 0, .y = 0 },
-            .animation = null,
-        };
-    }
-
-    pub fn getWorldPos(self: *const Self) rl.Vector2(f32) {
-        if (self.animation) |animation| {
-            return animation.current;
-        }
-        return get_world_pos_from_grid(i32, self.current_pos, CUBE);
-    }
-
-    pub fn move(self: *Self, dir: rl.Vector2(i32)) void {
-        if (dir.isZero()) return;
-        const start = self.current_pos;
-        const end = self.current_pos.add(dir);
-        const world_start = start.mul(CUBE).as(f32);
-        const world_end = end.mul(CUBE).as(f32);
-        self.startAnimation(world_start, world_end, 0.2);
-        self.current_pos = end;
-    }
-
-    pub fn center(self: *const Self) Vector2(f32) {
-        return self.current_pos.mul(CUBE).as(f32).add(Self.CENTER);
-    }
-
-    pub fn startAnimation(self: *Self, start: rl.Vector2(f32), end: rl.Vector2(f32), duration: f32) void {
-        self.animation = Animation{
-            .start = start,
-            .end = end,
-            .current = start,
-            .time = 0.0,
-            .elapsedTime = 0.0,
-            .duration = duration,
-        };
-    }
-
-    pub fn isAnimating(self: *const Self) bool {
-        return self.animation != null;
-    }
-
-    pub fn update(self: *Self, deltaTime: f32) void {
-        if (self.animation) |*animation| {
-            if (animation.isDone()) {
-                self.animation = null;
-                return;
-            }
-            animation.update(deltaTime);
-            return;
-        }
-    }
-
-    pub fn draw(self: Self) void {
-        if (self.animation) |_| {
-            const pos = self.getWorldPos();
-            rl.DrawRectangleV(pos, CUBE.as(f32), rl.Color.red());
-            return;
-        }
-
-        const pos = get_world_pos_from_grid(i32, self.current_pos, CUBE);
-        rl.DrawRectangleV(pos, CUBE.as(f32), rl.Color.red());
-    }
-};
-
-const Animation = struct {
-    const Self = @This();
-    start: rl.Vector2(f32),
-    end: rl.Vector2(f32),
-    current: rl.Vector2(f32),
-    time: f32,
-    elapsedTime: f32,
-    duration: f32,
-
-    fn isDone(self: Self) bool {
-        return self.elapsedTime >= self.duration;
-    }
-
-    fn update(self: *Self, deltaTime: f32) void {
-        self.elapsedTime += deltaTime; // Update the elapsed time
-
-        var interpolationFactor = self.elapsedTime / self.duration;
-
-        if (interpolationFactor > 1.0) {
-            interpolationFactor = 1.0;
-        }
-
-        // Linear interpolation (LERP)
-        self.current.x = self.start.x + interpolationFactor * (self.end.x - self.start.x);
-        self.current.y = self.start.y + interpolationFactor * (self.end.y - self.start.y);
-    }
-};
-
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
@@ -145,7 +41,7 @@ pub fn main() !void {
     rl.SetExitKey(rl.KeyboardKey.NULL);
 
     // INIT
-    const display_cords_buffer: []u8 = try allocator.alloc(u8, TEXT_BUFFER_SIZE);
+    const display_cords_buffer: []u8 = try allocator.alloc(u8, CONSTANTS.TEXT_BUFFER_SIZE);
     defer allocator.free(display_cords_buffer);
     var block_map = BlockMap.init(allocator);
     defer block_map.deinit();
@@ -156,7 +52,10 @@ pub fn main() !void {
     var player = Player.init();
 
     var camera: rl.Camera2D = .{
-        .offset = .{ .x = screen_width / 2 + CELL_SIZE, .y = screen_height / 2 + CELL_SIZE },
+        .offset = .{
+            .x = screen_width / 2 + CONSTANTS.CELL_SIZE,
+            .y = screen_height / 2 + CONSTANTS.CELL_SIZE,
+        },
         .target = .{ .x = 0, .y = 0 },
         .rotation = 0,
         .zoom = 1,
@@ -174,7 +73,7 @@ pub fn main() !void {
         camera.target = player.getWorldPos().asRaylibVector2();
         rl.BeginDrawing();
         defer rl.EndDrawing();
-        rl.ClearBackground(BACKGROUND_COLOR);
+        rl.ClearBackground(CONSTANTS.BACKGROUND_COLOR);
         rl.BeginMode2D(camera);
         defer rl.EndMode2D();
 
@@ -252,7 +151,7 @@ fn is_collision(player: rl.Vector2(i32), direction: rl.Vector2(i32), block_map: 
 fn update_world(width: i32, height: i32, player_pos: rl.Vector2(i32), block_map: *BlockMap, mangaled: *BlockMap) !void {
     block_map.*.clearRetainingCapacity();
     const offset = get_top_left_coner_of_grid_on_screen(player_pos, Vector2(i32).init(width, height));
-    const size = Vector2(i32).init(width, height).div(CUBE);
+    const size = Vector2(i32).init(width, height).div(CONSTANTS.CUBE);
     const image = rl.GenImagePerlinNoise(
         size.x,
         size.y,
@@ -326,7 +225,7 @@ fn keyboard_update_game(
     // PLACING BLOCK
     if (rl.IsMouseButtonPressed(rl.MouseButton.Left)) {
         const world_mouse_pos = rl.GetScreenToWorld2D(cursor.*, camera.*);
-        const block_pos = get_grid_pos(f32, world_mouse_pos, CUBE.as(f32));
+        const block_pos = get_grid_pos(f32, world_mouse_pos, CONSTANTS.CUBE.as(f32));
         if (block_pos.eq(player.current_pos)) return;
         try mangaled.put(block_pos.as(i32), .Stone);
     }
@@ -334,7 +233,7 @@ fn keyboard_update_game(
     // DESTROYING BLOCK
     if (rl.IsMouseButtonPressed(rl.MouseButton.Right)) {
         const world_mouse_pos = rl.GetScreenToWorld2D(cursor.*, camera.*);
-        const block_pos = get_grid_pos(f32, world_mouse_pos, CUBE.as(f32));
+        const block_pos = get_grid_pos(f32, world_mouse_pos, CONSTANTS.CUBE.as(f32));
         if (block_pos.eq(player.current_pos)) return;
         _ = mangaled.remove(block_pos.as(i32));
     }
@@ -386,13 +285,8 @@ fn get_grid_pos(comptime T: type, pos: rl.Vector2(T), cell: rl.Vector2(T)) rl.Ve
     return pos.div(cell).as(i32);
 }
 
-// Takes a grid position Vector(i32) and returns the world position as Vector2(f32)
-fn get_world_pos_from_grid(comptime T: type, pos: rl.Vector2(T), cell: rl.Vector2(T)) rl.Vector2(f32) {
-    return pos.mul(cell).as(f32);
-}
-
 fn get_top_left_coner_of_grid_on_screen(player: rl.Vector2(i32), screen: rl.Vector2(i32)) rl.Vector2(i32) {
-    return player.sub(screen.div(CUBE).div(.{ .x = 2, .y = 2 }));
+    return player.sub(screen.div(CONSTANTS.CUBE).div(.{ .x = 2, .y = 2 }));
 }
 
 fn get_direction(point: rl.Vector2(f32), cursor: *const rl.Vector2(f32), camera: *rl.Camera2D) rl.Vector2(f32) {
@@ -402,7 +296,7 @@ fn get_direction(point: rl.Vector2(f32), cursor: *const rl.Vector2(f32), camera:
 }
 
 fn draw_block(pos: rl.Vector2(i32), color: rl.Color) void {
-    rl.DrawRectangleV(pos.mul(CUBE).as(f32), CUBE.as(f32), color);
+    rl.DrawRectangleV(pos.mul(CONSTANTS.CUBE).as(f32), CONSTANTS.CUBE.as(f32), color);
 }
 
 fn draw_placed_blocks(block_map: *BlockMap) void {
@@ -424,42 +318,42 @@ fn draw_info(
     const ui_pos = Vector2(f32).init(30, 10);
     const offset = rl.GetScreenToWorld2D(ui_pos, camera.*).as(i32);
     const display_cords = try std.fmt.bufPrintZ(buffer[0..], "pos: x: {d} y: {d}", .{ player.current_pos.x, player.current_pos.y });
-    rl.DrawText(display_cords, offset.x, offset.y, 30, UI_TEXT_COLOR);
+    rl.DrawText(display_cords, offset.x, offset.y, 30, CONSTANTS.UI_TEXT_COLOR);
     // ----Cursor Position-----
     const screen_mouse = rl.GetScreenToWorld2D(cursor.*, camera.*).as(i32);
-    const cursor_at_block_pos = get_grid_pos(i32, screen_mouse, CUBE);
+    const cursor_at_block_pos = get_grid_pos(i32, screen_mouse, CONSTANTS.CUBE);
     const x = cursor_at_block_pos.x;
     const y = cursor_at_block_pos.y;
     const cursor_location = try std.fmt.bufPrintZ(buffer[0..], "cur: x: {d} y: {d}", .{ x, y });
-    rl.DrawText(cursor_location, offset.x, offset.y + 35, 30, UI_TEXT_COLOR);
+    rl.DrawText(cursor_location, offset.x, offset.y + 35, 30, CONSTANTS.UI_TEXT_COLOR);
 }
 
 fn draw_grid(player: *Player, camera: *rl.Camera2D, width: i32, height: i32) void {
     // const pos = Vector2(f32).fromRaylibVevtor2(camera.offset);
     const pos = Vector2(f32).init(
-        @mod(camera.offset.x, CELL_SIZE) - CELL_SIZE,
-        @mod(camera.offset.y, CELL_SIZE) - CELL_SIZE,
+        @mod(camera.offset.x, CONSTANTS.CELL_SIZE) - CONSTANTS.CELL_SIZE,
+        @mod(camera.offset.y, CONSTANTS.CELL_SIZE) - CONSTANTS.CELL_SIZE,
     );
     const player_offset = player.current_pos.sub(player.get_pos_snap_to_grid()).as(i32);
-    const offset = rl.GetScreenToWorld2D(pos.mul(CUBE), camera.*).as(i32);
+    const offset = rl.GetScreenToWorld2D(pos.mul(CONSTANTS.CUBE), camera.*).as(i32);
     var x: i32 = 0;
-    while (x < width + CELL_SIZE) : (x += CELL_SIZE) {
+    while (x < width + CONSTANTS.CELL_SIZE) : (x += CONSTANTS.CELL_SIZE) {
         rl.DrawLine(
             x + offset.x - player_offset.x,
-            offset.y - CELL_SIZE - player_offset.y,
+            offset.y - CONSTANTS.CELL_SIZE - player_offset.y,
             x + offset.x - player_offset.x,
-            offset.y + height + CELL_SIZE - player_offset.y,
-            GRID_COLOR,
+            offset.y + height + CONSTANTS.CELL_SIZE - player_offset.y,
+            CONSTANTS.GRID_COLOR,
         );
     }
     var y: i32 = 0;
-    while (y < height + CELL_SIZE) : (y += CELL_SIZE) {
+    while (y < height + CONSTANTS.CELL_SIZE) : (y += CONSTANTS.CELL_SIZE) {
         rl.DrawLine(
-            offset.x - CELL_SIZE - player_offset.x,
+            offset.x - CONSTANTS.CELL_SIZE - player_offset.x,
             y + offset.y - player_offset.y,
-            offset.x + width + CELL_SIZE - player_offset.x,
+            offset.x + width + CONSTANTS.CELL_SIZE - player_offset.x,
             y + offset.y - player_offset.y,
-            GRID_COLOR,
+            CONSTANTS.GRID_COLOR,
         );
     }
 }
