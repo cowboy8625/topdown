@@ -7,18 +7,9 @@ const Vector2 = rl.Vector2;
 const Player = @import("Player.zig");
 const Interpolation = @import("Interpolation.zig");
 const CONSTANTS = @import("constants.zig");
-
-const BlockType = enum {
-    Stone,
-
-    fn color(self: BlockType) rl.Color {
-        return switch (self) {
-            .Stone => rl.Color.lightGray(),
-        };
-    }
-};
-
-const BlockMap = std.AutoHashMap(Vector2(i32), BlockType);
+const Chunk = @import("Chunk.zig");
+const BlockType = @import("BlockType.zig").BlockType;
+const World = @import("World.zig");
 
 const Mode = enum { Game, Pause, Menu };
 
@@ -43,13 +34,11 @@ pub fn main() !void {
     // INIT
     const display_cords_buffer: []u8 = try allocator.alloc(u8, CONSTANTS.TEXT_BUFFER_SIZE);
     defer allocator.free(display_cords_buffer);
-    var block_map = BlockMap.init(allocator);
-    defer block_map.deinit();
-    var mangaled = BlockMap.init(allocator);
-    defer mangaled.deinit();
 
     var state = State{ .mode = .Game };
     var player = Player.init();
+    var world = try World.init(allocator);
+    defer world.deinit();
 
     var camera: rl.Camera2D = .{
         .offset = .{
@@ -65,10 +54,20 @@ pub fn main() !void {
 
     while (!rl.WindowShouldClose()) {
         // UPDATE
+
         const cursor = rl.GetMousePosition();
-        try keyboard_update(&cursor, &state, &player, &camera, &block_map, &mangaled);
-        try update_world(screen_width, screen_height, player.current_pos, &block_map, &mangaled);
-        update(&state, &player, &block_map);
+        try keyboard_update(&cursor, &state, &player, &camera, &world);
+        try update_world(screen_width, screen_height, player.current_pos);
+
+        const deltaTime = rl.GetFrameTime();
+        switch (state.mode) {
+            .Game => {
+                player.update(deltaTime);
+                world.update();
+            },
+            .Pause => {},
+            .Menu => {},
+        }
 
         camera.target = player.getWorldPos().asRaylibVector2();
         rl.BeginDrawing();
@@ -77,36 +76,44 @@ pub fn main() !void {
         rl.BeginMode2D(camera);
         defer rl.EndMode2D();
 
+        world.draw();
+        player.draw();
+        switch (state.mode) {
+            .Game => {},
+            .Pause => {
+                const center = get_center_screen();
+                const text_width = rl.MeasureText("PAUSED", 20);
+                const screen_center: rl.Vector2(f32) = .{
+                    .x = center.x - cast(f32, @divFloor(text_width, 2)),
+                    .y = center.y,
+                };
+                const pos = rl.GetScreenToWorld2D(screen_center, camera).as(i32);
+                rl.DrawText("PAUSED", pos.x, pos.y, 20, rl.Color.red());
+            },
+            .Menu => {},
+        }
+        // draw_grid(&player, &camera, screen_width, screen_height);
+
+        // UI DRAW ON TOP OF EVERYTHING
+        try draw_info(&cursor, &camera, display_cords_buffer, &player);
+
         // DRAW
-        try draw(
-            &cursor,
-            display_cords_buffer,
-            &player,
-            &state,
-            &camera,
-            &block_map,
-            screen_width,
-            screen_height,
-        );
+        // try draw(
+        //     &cursor,
+        //     display_cords_buffer,
+        //     &player,
+        //     &state,
+        //     &camera,
+        //     &block_map,
+        //     screen_width,
+        //     screen_height,
+        // );
     }
 }
 
-fn update(state: *State, player: *Player, block_map: *BlockMap) void {
-    _ = block_map;
-    const deltaTime = rl.GetFrameTime();
-    switch (state.mode) {
-        .Game => {
-            // apply_velocity_to(player, block_map, block_buffer);
-            player.update(deltaTime);
-        },
-        .Pause => {},
-        .Menu => {},
-    }
-}
-
-fn is_collision(player: rl.Vector2(i32), direction: rl.Vector2(i32), block_map: *BlockMap) bool {
+fn is_collision(player: rl.Vector2(i32), direction: rl.Vector2(i32), world: *World) bool {
     const location = player.add(direction);
-    return block_map.contains(location);
+    return world.contains(location);
 }
 
 /// Get the blocks surrounding the point
@@ -148,8 +155,8 @@ fn is_collision(player: rl.Vector2(i32), direction: rl.Vector2(i32), block_map: 
 //     player.pos = player_pos;
 // }
 
-fn update_world(width: i32, height: i32, player_pos: rl.Vector2(i32), block_map: *BlockMap, mangaled: *BlockMap) !void {
-    block_map.*.clearRetainingCapacity();
+fn update_world(width: i32, height: i32, player_pos: rl.Vector2(i32)) !void {
+    // block_map.*.clearRetainingCapacity();
     const offset = get_top_left_coner_of_grid_on_screen(player_pos, Vector2(i32).init(width, height));
     const size = Vector2(i32).init(width, height).div(CONSTANTS.CUBE);
     const image = rl.GenImagePerlinNoise(
@@ -169,14 +176,14 @@ fn update_world(width: i32, height: i32, player_pos: rl.Vector2(i32), block_map:
             const b: bool = color.b > 128;
             const a: bool = color.a > 128;
             if (r and g and b and a) {
-                try block_map.*.put(pixel.add(offset).sub(.{ .x = 1, .y = 2 }), .Stone);
+                // try block_map.*.put(pixel.add(offset).sub(.{ .x = 1, .y = 2 }), .Stone);
             }
         }
     }
-    var iter = mangaled.*.iterator();
-    while (iter.next()) |entry| {
-        try block_map.*.put(entry.key_ptr.*, entry.value_ptr.*);
-    }
+    // var iter = mangaled.*.iterator();
+    // while (iter.next()) |entry| {
+    //     try block_map.*.put(entry.key_ptr.*, entry.value_ptr.*);
+    // }
 }
 
 fn keyboard_update(
@@ -184,11 +191,10 @@ fn keyboard_update(
     state: *State,
     player: *Player,
     camera: *rl.Camera2D,
-    block_map: *BlockMap,
-    mangaled: *BlockMap,
+    world: *World,
 ) !void {
     switch (state.mode) {
-        .Game => try keyboard_update_game(cursor, state, player, camera, block_map, mangaled),
+        .Game => try keyboard_update_game(cursor, state, player, camera, world),
         .Pause => try keyboard_update_pause(state),
         .Menu => {},
     }
@@ -199,8 +205,7 @@ fn keyboard_update_game(
     state: *State,
     player: *Player,
     camera: *rl.Camera2D,
-    block_map: *BlockMap,
-    mangaled: *BlockMap,
+    world: *World,
 ) !void {
     var dir = Vector2(i32).init(0, 0);
     if (rl.IsKeyPressed(rl.KeyboardKey.LEFT) or rl.IsKeyPressed(rl.KeyboardKey.A)) {
@@ -214,7 +219,7 @@ fn keyboard_update_game(
         dir.y += 1;
     } else {}
 
-    if (!is_collision(player.current_pos, dir, block_map) and !player.isAnimating()) {
+    if (!is_collision(player.current_pos, dir, world) and !player.isAnimating()) {
         player.move(dir);
     }
 
@@ -227,7 +232,7 @@ fn keyboard_update_game(
         const world_mouse_pos = rl.GetScreenToWorld2D(cursor.*, camera.*);
         const block_pos = get_grid_pos(f32, world_mouse_pos, CONSTANTS.CUBE.as(f32));
         if (block_pos.eq(player.current_pos)) return;
-        try mangaled.put(block_pos.as(i32), .Stone);
+        try world.replaceBlock(block_pos.as(i32), .Stone);
     }
 
     // DESTROYING BLOCK
@@ -235,7 +240,7 @@ fn keyboard_update_game(
         const world_mouse_pos = rl.GetScreenToWorld2D(cursor.*, camera.*);
         const block_pos = get_grid_pos(f32, world_mouse_pos, CONSTANTS.CUBE.as(f32));
         if (block_pos.eq(player.current_pos)) return;
-        _ = mangaled.remove(block_pos.as(i32));
+        try world.deleteBlock(block_pos.as(i32));
     }
 }
 
@@ -243,37 +248,6 @@ fn keyboard_update_pause(state: *State) !void {
     if (rl.IsKeyPressed(rl.KeyboardKey.ESCAPE)) {
         state.mode = .Game;
     }
-}
-
-fn draw(
-    cursor: *const rl.Vector2(f32),
-    buffer: []u8,
-    player: *Player,
-    state: *State,
-    camera: *rl.Camera2D,
-    block_map: *BlockMap,
-    screen_width: i32,
-    screen_height: i32,
-) !void {
-    _ = screen_height;
-    _ = screen_width;
-    player.draw();
-    draw_placed_blocks(block_map);
-    // draw_grid(player, camera, screen_width, screen_height);
-    // PAUSE MENU
-    if (state.mode == .Pause) {
-        const center = get_center_screen();
-        const text_width = rl.MeasureText("PAUSED", 20);
-        const screen_center: rl.Vector2(f32) = .{
-            .x = center.x - cast(f32, @divFloor(text_width, 2)),
-            .y = center.y,
-        };
-        const pos = rl.GetScreenToWorld2D(screen_center, camera.*).as(i32);
-        rl.DrawText("PAUSED", pos.x, pos.y, 20, rl.Color.red());
-    }
-
-    // UI DRAW ON TOP OF EVERYTHING
-    try draw_info(cursor, camera, buffer, player);
 }
 
 fn get_center_screen() Vector2(f32) {
@@ -293,19 +267,6 @@ fn get_direction(point: rl.Vector2(f32), cursor: *const rl.Vector2(f32), camera:
     const world_space_cursor = rl.GetScreenToWorld2D(cursor.*, camera.*);
     const radians = std.math.atan2(world_space_cursor.y - point.y, world_space_cursor.x - point.x);
     return .{ .x = std.math.cos(radians), .y = std.math.sin(radians) };
-}
-
-fn draw_block(pos: rl.Vector2(i32), color: rl.Color) void {
-    rl.DrawRectangleV(pos.mul(CONSTANTS.CUBE).as(f32), CONSTANTS.CUBE.as(f32), color);
-}
-
-fn draw_placed_blocks(block_map: *BlockMap) void {
-    var iter = block_map.iterator();
-    while (iter.next()) |entry| {
-        const block_pos = entry.key_ptr;
-        const color = entry.value_ptr.color();
-        draw_block(block_pos.*, color);
-    }
 }
 
 fn draw_info(
@@ -328,32 +289,32 @@ fn draw_info(
     rl.DrawText(cursor_location, offset.x, offset.y + 35, 30, CONSTANTS.UI_TEXT_COLOR);
 }
 
-fn draw_grid(player: *Player, camera: *rl.Camera2D, width: i32, height: i32) void {
-    // const pos = Vector2(f32).fromRaylibVevtor2(camera.offset);
-    const pos = Vector2(f32).init(
-        @mod(camera.offset.x, CONSTANTS.CELL_SIZE) - CONSTANTS.CELL_SIZE,
-        @mod(camera.offset.y, CONSTANTS.CELL_SIZE) - CONSTANTS.CELL_SIZE,
-    );
-    const player_offset = player.current_pos.sub(player.get_pos_snap_to_grid()).as(i32);
-    const offset = rl.GetScreenToWorld2D(pos.mul(CONSTANTS.CUBE), camera.*).as(i32);
-    var x: i32 = 0;
-    while (x < width + CONSTANTS.CELL_SIZE) : (x += CONSTANTS.CELL_SIZE) {
-        rl.DrawLine(
-            x + offset.x - player_offset.x,
-            offset.y - CONSTANTS.CELL_SIZE - player_offset.y,
-            x + offset.x - player_offset.x,
-            offset.y + height + CONSTANTS.CELL_SIZE - player_offset.y,
-            CONSTANTS.GRID_COLOR,
-        );
-    }
-    var y: i32 = 0;
-    while (y < height + CONSTANTS.CELL_SIZE) : (y += CONSTANTS.CELL_SIZE) {
-        rl.DrawLine(
-            offset.x - CONSTANTS.CELL_SIZE - player_offset.x,
-            y + offset.y - player_offset.y,
-            offset.x + width + CONSTANTS.CELL_SIZE - player_offset.x,
-            y + offset.y - player_offset.y,
-            CONSTANTS.GRID_COLOR,
-        );
-    }
-}
+// fn draw_grid(player: *Player, camera: *rl.Camera2D, width: i32, height: i32) void {
+//     const pos = Vector2(f32).init(
+//         @mod(camera.offset.x, CONSTANTS.CELL_SIZE) - CONSTANTS.CELL_SIZE,
+//         @mod(camera.offset.y, CONSTANTS.CELL_SIZE) - CONSTANTS.CELL_SIZE,
+//     );
+//     const player_offset = player.current_pos.sub(player.current_pos.div(CONSTANTS.CUBE).mul(CONSTANTS.CUBE)).as(i32);
+//     const offset = rl.GetScreenToWorld2D(pos.mul(CONSTANTS.CUBE.as(f32)), camera.*).as(i32);
+//
+//     var x: i32 = 0;
+//     while (x < width + CONSTANTS.CELL_SIZE) : (x += CONSTANTS.CELL_SIZE) {
+//         rl.DrawLine(
+//             x + offset.x - player_offset.x,
+//             offset.y - CONSTANTS.CELL_SIZE - player_offset.y,
+//             x + offset.x - player_offset.x,
+//             offset.y + height + CONSTANTS.CELL_SIZE - player_offset.y,
+//             CONSTANTS.GRID_COLOR,
+//         );
+//     }
+//     var y: i32 = 0;
+//     while (y < height + CONSTANTS.CELL_SIZE) : (y += CONSTANTS.CELL_SIZE) {
+//         rl.DrawLine(
+//             offset.x - CONSTANTS.CELL_SIZE - player_offset.x,
+//             y + offset.y - player_offset.y,
+//             offset.x + width + CONSTANTS.CELL_SIZE - player_offset.x,
+//             y + offset.y - player_offset.y,
+//             CONSTANTS.GRID_COLOR,
+//         );
+//     }
+// }

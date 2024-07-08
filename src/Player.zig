@@ -3,8 +3,10 @@ const rl = @import("raylib_zig");
 const utils = @import("utils.zig");
 const Interpolation = @import("Interpolation.zig");
 const CONSTANTS = @import("constants.zig");
+const Chunk = @import("Chunk.zig");
 
 const Self = @This();
+
 const CENTER: rl.Vector2(f32) = CONSTANTS.CUBE.as(f32).divFromNum(2);
 current_pos: rl.Vector2(i32),
 animation: ?Interpolation = null,
@@ -21,6 +23,10 @@ pub fn getWorldPos(self: *const Self) rl.Vector2(f32) {
         return animation.current;
     }
     return utils.get_world_pos_from_grid(i32, self.current_pos, CONSTANTS.CUBE);
+}
+
+pub fn getChunkPos(self: *const Self) rl.Vector2(i32) {
+    return self.current_pos.divFromNum(Chunk.SIZE);
 }
 
 pub fn move(self: *Self, dir: rl.Vector2(i32)) void {
