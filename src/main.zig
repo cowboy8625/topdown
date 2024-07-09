@@ -63,7 +63,7 @@ pub fn main() !void {
         switch (state.mode) {
             .Game => {
                 player.update(deltaTime);
-                world.update();
+                try world.update(player.current_pos);
             },
             .Pause => {},
             .Menu => {},
