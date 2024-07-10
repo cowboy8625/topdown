@@ -15,7 +15,10 @@ pos: rl.Vector2(i32),
 map: BlockMap,
 alloc: Allocator,
 
-pub fn init(alloc: Allocator, pos: rl.Vector2(i32)) !Self {
+pub fn init(alloc: Allocator, pos: rl.Vector2(i32)) !*Self {
+    const self = try alloc.create(Self);
+    errdefer alloc.destroy(self);
+
     var map = BlockMap.init(alloc);
     errdefer map.deinit();
 
@@ -44,15 +47,19 @@ pub fn init(alloc: Allocator, pos: rl.Vector2(i32)) !Self {
             }
         }
     }
-    return .{
+
+    self.* = .{
         .pos = pos,
         .map = map,
         .alloc = alloc,
     };
+
+    return self;
 }
 
 pub fn deinit(self: *Self) void {
     self.map.deinit();
+    self.alloc.destroy(self);
 }
 
 pub fn replaceBlock(self: *Self, pos: rl.Vector2(i32), block: BlockType) !void {

@@ -18,7 +18,7 @@ pub const ChunkId = enum {
     Nine,
 };
 
-const ChunkMap = std.EnumArray(ChunkId, Chunk);
+const ChunkMap = std.EnumArray(ChunkId, *Chunk);
 
 map: ChunkMap,
 alloc: Allocator,
@@ -69,34 +69,76 @@ fn getChunkFromPos(self: *Self, pos: rl.Vector2(i32)) struct { key: ChunkId, val
     while (iter.next()) |*entry| {
         const chunk_pos = entry.value.*.pos;
         if (chunk_pos.x == p.x and chunk_pos.y == p.y) {
-            return .{ .key = entry.key, .value = entry.value };
+            return .{ .key = entry.key, .value = entry.value.* };
         }
     }
     unreachable;
 }
 
-fn unloadChunks(self: *Self, chunk_ids: []const ChunkId) void {
-    for (chunk_ids) |chunk_id| {
-        var chunk = self.map.get(chunk_id);
-        chunk.deinit();
+fn generateNextChunk(
+    self: *Self,
+    current: ChunkId,
+    to: ChunkId,
+    pos: rl.Vector2(i32),
+    out: *std.EnumArray(ChunkId, bool),
+) !*Chunk {
+    switch (current) {
+        .One => switch (to) {
+            .One, .Two, .Three, .Four, .Seven => out.set(to, true),
+            else => {},
+        },
+        .Two => switch (to) {
+            .One, .Two, .Three => out.set(to, true),
+            else => {},
+        },
+        .Three => switch (to) {
+            .One, .Two, .Three, .Six, .Nine => out.set(to, true),
+            else => {},
+        },
+        .Four => {},
+        .Five => {},
+        .Six => {},
+        .Seven => {},
+        .Eight => {},
+        .Nine => {},
     }
-}
-
-fn generateChunks(self: *Self, chunk_ids: []const ChunkId) !void {
-    const base = self.map.get(.Five).pos;
-    for (chunk_ids) |chunk_id| {
-        const chunk = self.map.getPtr(chunk_id);
-        const pos = getChunkPosFromBase(chunk_id, base);
-        chunk.* = try Chunk.init(chunk.alloc, pos);
-    }
-}
-
-fn moveChunk(self: *Self, from: ChunkId, to: ChunkId) void {
-    const from_chunk = self.map.getPtr(from);
-    const to_chunk = self.map.getPtr(to);
-    const temp = to_chunk.*;
-    to_chunk.* = from_chunk.*;
-    from_chunk.* = temp;
+    // This function needs to return the chunk that will be generated next weather it be a new
+    // or old chunk.  Chunks are now pointers.  We also need to skip deinit'ing the chunks that
+    // are not being generated.
+    // 1 | 2 | 3
+    // 4 | 5 | 6
+    // 7 | 8 | 9
+    return switch (current) {
+        .One => switch (to) {
+            .One, .Two, .Three, .Four, .Seven => try Chunk.init(self.alloc, .{ .x = -1 + pos.x, .y = -1 + pos.y }),
+            .Five => self.map.get(.One),
+            .Six => self.map.get(.Two),
+            .Eight => self.map.get(.Four),
+            .Nine => self.map.get(.Five),
+        },
+        .Two => switch (to) {
+            .One, .Two, .Three => try Chunk.init(self.alloc, .{ .x = 0 + pos.x, .y = -1 + pos.y }),
+            .Four => self.map.get(.One),
+            .Five => self.map.get(.Two),
+            .Six => self.map.get(.Three),
+            .Seven => self.map.get(.Four),
+            .Eight => self.map.get(.Five),
+            .Nine => self.map.get(.Six),
+        },
+        .Three => switch (to) {
+            .One, .Two, .Three, .Six, .Nine => try Chunk.init(self.alloc, .{ .x = 1 + pos.x, .y = -1 + pos.y }),
+            .Four => self.map.get(.Two),
+            .Five => self.map.get(.Three),
+            .Seven => self.map.get(.Five),
+            .Eight => self.map.get(.Six),
+        },
+        .Four => unreachable,
+        .Five => unreachable,
+        .Six => unreachable,
+        .Seven => unreachable,
+        .Eight => unreachable,
+        .Nine => unreachable,
+    };
 }
 
 pub fn update(self: *Self, pos: rl.Vector2(i32)) !void {
@@ -105,25 +147,45 @@ pub fn update(self: *Self, pos: rl.Vector2(i32)) !void {
         return;
     }
 
-    var iter = self.map.iterator();
-    while (iter.next()) |entry| {
-        entry.value.*.deinit();
+    var chunks_to_unload = std.EnumArray(ChunkId, bool).init(.{
+        .One = false,
+        .Two = false,
+        .Three = false,
+        .Four = false,
+        .Five = false,
+        .Six = false,
+        .Seven = false,
+        .Eight = false,
+        .Nine = false,
+    });
+
+    const one = try self.generateNextChunk(chunk.key, .One, chunk.value.pos, &chunks_to_unload);
+    const two = try self.generateNextChunk(chunk.key, .Two, chunk.value.pos, &chunks_to_unload);
+    const three = try self.generateNextChunk(chunk.key, .Three, chunk.value.pos, &chunks_to_unload);
+    const four = try self.generateNextChunk(chunk.key, .Four, chunk.value.pos, &chunks_to_unload);
+    const five = try self.generateNextChunk(chunk.key, .Five, chunk.value.pos, &chunks_to_unload);
+    const six = try self.generateNextChunk(chunk.key, .Six, chunk.value.pos, &chunks_to_unload);
+    const seven = try self.generateNextChunk(chunk.key, .Seven, chunk.value.pos, &chunks_to_unload);
+    const eight = try self.generateNextChunk(chunk.key, .Eight, chunk.value.pos, &chunks_to_unload);
+    const nine = try self.generateNextChunk(chunk.key, .Nine, chunk.value.pos, &chunks_to_unload);
+
+    var iter = chunks_to_unload.iterator();
+    while (iter.next()) |unload| {
+        if (unload.value.*) {
+            self.map.get(unload.key).deinit();
+            std.debug.print("{any}: {any}\n", .{ unload.key, unload.value.* });
+        }
     }
 
-    const x = chunk.value.pos.x;
-    const y = chunk.value.pos.y;
-
-    self.map = ChunkMap.init(.{
-        .One = try Chunk.init(self.alloc, .{ .x = -1 + x, .y = -1 + y }),
-        .Two = try Chunk.init(self.alloc, .{ .x = 0 + x, .y = -1 + y }),
-        .Three = try Chunk.init(self.alloc, .{ .x = 1 + x, .y = -1 + y }),
-        .Four = try Chunk.init(self.alloc, .{ .x = -1 + x, .y = 0 + y }),
-        .Five = try Chunk.init(self.alloc, .{ .x = 0 + x, .y = 0 + y }),
-        .Six = try Chunk.init(self.alloc, .{ .x = 1 + x, .y = 0 + y }),
-        .Seven = try Chunk.init(self.alloc, .{ .x = -1 + x, .y = 1 + y }),
-        .Eight = try Chunk.init(self.alloc, .{ .x = 0 + x, .y = 1 + y }),
-        .Nine = try Chunk.init(self.alloc, .{ .x = 1 + x, .y = 1 + y }),
-    });
+    self.map.set(.One, one);
+    self.map.set(.Two, two);
+    self.map.set(.Three, three);
+    self.map.set(.Four, four);
+    self.map.set(.Five, five);
+    self.map.set(.Six, six);
+    self.map.set(.Seven, seven);
+    self.map.set(.Eight, eight);
+    self.map.set(.Nine, nine);
 }
 
 pub fn draw(self: *Self) void {
