@@ -57,7 +57,6 @@ pub fn main() !void {
 
         const cursor = rl.GetMousePosition();
         try keyboard_update(&cursor, &state, &player, &camera, &world);
-        try update_world(screen_width, screen_height, player.current_pos);
 
         const deltaTime = rl.GetFrameTime();
         switch (state.mode) {
@@ -96,94 +95,7 @@ pub fn main() !void {
 
         // UI DRAW ON TOP OF EVERYTHING
         try draw_info(&cursor, &camera, display_cords_buffer, &player);
-
-        // DRAW
-        // try draw(
-        //     &cursor,
-        //     display_cords_buffer,
-        //     &player,
-        //     &state,
-        //     &camera,
-        //     &block_map,
-        //     screen_width,
-        //     screen_height,
-        // );
     }
-}
-
-fn is_collision(player: rl.Vector2(i32), direction: rl.Vector2(i32), world: *World) bool {
-    const location = player.add(direction);
-    return world.contains(location);
-}
-
-/// Get the blocks surrounding the point
-/// | 0 | 1 | 2 |
-/// | 3 | 4 | 5 |
-/// | 6 | 7 | 8 |
-/// index 4 is the point passed in
-// fn get_blocks_surrounding(point: rl.Vector2(f32), block_map: *BlockMap, out: []?rl.Vector2(i32)) void {
-//     const grid_pos = get_grid_pos(f32, point, CUBE.as(f32));
-//     var index: usize = 0;
-//     var x = grid_pos.x - 1;
-//     while (x <= grid_pos.x + 1) : (x += 1) {
-//         var y = grid_pos.y - 1;
-//         while (y <= grid_pos.y + 1) : (y += 1) {
-//             const block_pos: Vector2(i32) = .{ .x = x, .y = y };
-//             if (block_map.contains(block_pos)) {
-//                 out[index] = block_pos;
-//                 index += 1;
-//             }
-//         }
-//     }
-// }
-//
-// fn apply_velocity_to(player: *Player, block_map: *BlockMap, block_buffer: []?rl.Vector2(i32)) void {
-//     const player_pos = player.pos.add(player.vel);
-//     get_blocks_surrounding(player.center(), block_map, block_buffer);
-//     if (block_buffer.len != 0) {
-//         for (block_buffer) |block_pos| {
-//             if (block_pos) |pos| {
-//                 const block = rl.Rectangle(f32).from2vec2(pos.mul(CUBE).as(f32), CUBE.as(f32));
-//                 if (rl.CheckCollisionCircleRec(player.center(), player.radius, block)) {
-//                     player.pos = player.pos.sub(player.vel);
-//                     player.vel = .{ .x = 0, .y = 0 };
-//                     return;
-//                 }
-//             }
-//         }
-//     }
-//     player.pos = player_pos;
-// }
-
-fn update_world(width: i32, height: i32, player_pos: rl.Vector2(i32)) !void {
-    // block_map.*.clearRetainingCapacity();
-    const offset = get_top_left_coner_of_grid_on_screen(player_pos, Vector2(i32).init(width, height));
-    const size = Vector2(i32).init(width, height).div(CONSTANTS.CUBE);
-    const image = rl.GenImagePerlinNoise(
-        size.x,
-        size.y,
-        offset.x,
-        offset.y,
-        1.0,
-    );
-    defer rl.UnloadImage(image);
-    for (0..cast(usize, image.width)) |x| {
-        for (0..cast(usize, image.height)) |y| {
-            const pixel = Vector2(usize).init(x, y).as(i32);
-            const color = rl.GetImageColorV(image, pixel);
-            const r: bool = color.r > 128;
-            const g: bool = color.g > 128;
-            const b: bool = color.b > 128;
-            const a: bool = color.a > 128;
-            if (r and g and b and a) {
-                // try block_map.*.put(pixel.add(offset).sub(.{ .x = 1, .y = 2 }), .Stone);
-            }
-        }
-    }
-    // var iter = mangaled.*.iterator();
-    // while (iter.next()) |entry| {
-    //     try block_map.*.put(entry.key_ptr.*, entry.value_ptr.*);
-    // }
 }
 
 fn keyboard_update(
@@ -219,7 +131,7 @@ fn keyboard_update_game(
         dir.y += 1;
     } else {}
 
-    if (!is_collision(player.current_pos, dir, world) and !player.isAnimating()) {
+    if (!world.isCollision(player.current_pos, dir) and !player.isAnimating()) {
         player.move(dir);
     }
 

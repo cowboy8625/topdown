@@ -7,7 +7,7 @@ const Allocator = std.mem.Allocator;
 const BlockType = @import("BlockType.zig").BlockType;
 const BlockMap = std.AutoHashMap(rl.Vector2(i32), BlockType);
 
-pub const SIZE: i32 = 8;
+pub const SIZE: i32 = 32;
 
 const Self = @This();
 
