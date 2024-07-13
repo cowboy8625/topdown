@@ -11,11 +11,43 @@ pub const SIZE: i32 = 32;
 
 const Self = @This();
 
+const ChunkData = struct {
+    x: i32,
+    y: i32,
+    data: []BlockData,
+};
+
+const BlockData = struct {
+    x: i32,
+    y: i32,
+    blockType: BlockType,
+};
+
 pos: rl.Vector2(i32),
 map: BlockMap,
 alloc: Allocator,
+isDirty: bool = false,
 
 pub fn init(alloc: Allocator, pos: rl.Vector2(i32)) !*Self {
+    return loadChunk(alloc, pos) catch try generateChunk(alloc, pos);
+}
+
+fn loadChunk(alloc: Allocator, pos: rl.Vector2(i32)) !*Self {
+    const name_buffer = try alloc.alloc(u8, 32);
+    defer alloc.free(name_buffer);
+    const name = try std.fmt.bufPrint(name_buffer, "data/chunk_{d}_{d}.json", .{ pos.x, pos.y });
+    var file = try std.fs.cwd().openFile(name, .{});
+    defer file.close();
+
+    // Not sure what jsonParse needs string or Scanner;
+    const string = try alloc.alloc(u8, try file.getEndPos());
+    defer alloc.free(string);
+    _ = try file.readAll(string);
+
+    return try jsonParse(alloc, string, .{});
+}
+
+fn generateChunk(alloc: Allocator, pos: rl.Vector2(i32)) !*Self {
     const self = try alloc.create(Self);
     errdefer alloc.destroy(self);
 
