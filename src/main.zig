@@ -22,6 +22,8 @@ pub fn main() !void {
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
 
+    try std.fs.cwd().makePath("data");
+
     const screen_width = 1920;
     const screen_height = 1080;
     rl.InitWindow(screen_width, screen_height, "raylib zig template");
@@ -119,21 +121,49 @@ fn keyboard_update_game(
     camera: *rl.Camera2D,
     world: *World,
 ) !void {
-    var dir = Vector2(i32).init(0, 0);
-    if (rl.IsKeyPressed(rl.KeyboardKey.LEFT) or rl.IsKeyPressed(rl.KeyboardKey.A)) {
-        dir.x -= 1;
-    } else if (rl.IsKeyPressed(rl.KeyboardKey.RIGHT) or rl.IsKeyPressed(rl.KeyboardKey.D)) {
-        dir.x += 1;
-    } else {}
-    if (rl.IsKeyPressed(rl.KeyboardKey.UP) or rl.IsKeyPressed(rl.KeyboardKey.W)) {
-        dir.y -= 1;
-    } else if (rl.IsKeyPressed(rl.KeyboardKey.DOWN) or rl.IsKeyPressed(rl.KeyboardKey.S)) {
-        dir.y += 1;
-    } else {}
+    const IS_LEFT_PRESSED = rl.IsKeyPressed(rl.KeyboardKey.LEFT) or rl.IsKeyPressed(rl.KeyboardKey.A);
+    const IS_RIGHT_PRESSED = rl.IsKeyPressed(rl.KeyboardKey.RIGHT) or rl.IsKeyPressed(rl.KeyboardKey.D);
+    const IS_UP_PRESSED = rl.IsKeyPressed(rl.KeyboardKey.UP) or rl.IsKeyPressed(rl.KeyboardKey.W);
+    const IS_DOWN_PRESSED = rl.IsKeyPressed(rl.KeyboardKey.DOWN) or rl.IsKeyPressed(rl.KeyboardKey.S);
 
-    if (!world.isCollision(player.current_pos, dir) and !player.isAnimating()) {
-        player.move(dir);
+    const IS_LEFT_RELEASED = rl.IsKeyReleased(rl.KeyboardKey.LEFT) or rl.IsKeyReleased(rl.KeyboardKey.A);
+    const IS_RIGHT_RELEASED = rl.IsKeyReleased(rl.KeyboardKey.RIGHT) or rl.IsKeyReleased(rl.KeyboardKey.D);
+    const IS_UP_RELEASED = rl.IsKeyReleased(rl.KeyboardKey.UP) or rl.IsKeyReleased(rl.KeyboardKey.W);
+    const IS_DOWN_RELEASED = rl.IsKeyReleased(rl.KeyboardKey.DOWN) or rl.IsKeyReleased(rl.KeyboardKey.S);
+
+    if (IS_LEFT_PRESSED) {
+        player.velocity.x = -1;
+    } else if (IS_RIGHT_PRESSED) {
+        player.velocity.x = 1;
+    } else if (IS_LEFT_RELEASED or IS_RIGHT_RELEASED) {
+        player.velocity.x = 0;
     }
+
+    if (IS_UP_PRESSED) {
+        player.velocity.y = -1;
+    } else if (IS_DOWN_PRESSED) {
+        player.velocity.y = 1;
+    } else if (IS_UP_RELEASED or IS_DOWN_RELEASED) {
+        player.velocity.y = 0;
+    }
+
+    var dir = rl.Vector2(i32).init(0, 0);
+
+    const x = player.velocity.x;
+    if (!world.isCollision(player.current_pos, .{ .x = x, .y = 0 }) and !player.isAnimating()) {
+        dir.x = x;
+    }
+
+    const y = player.velocity.y;
+    if (!world.isCollision(player.current_pos, .{ .x = 0, .y = y }) and !player.isAnimating()) {
+        dir.y = y;
+    }
+
+    if (!dir.isZero() and world.isCollision(player.current_pos, dir)) {
+        dir.y = 0;
+    }
+
+    player.move(dir);
 
     if (rl.IsKeyPressed(rl.KeyboardKey.ESCAPE)) {
         state.mode = .Pause;

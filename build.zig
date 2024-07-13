@@ -17,6 +17,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("raylib_zig", raylib_zig);
 
     exe.linkSystemLibrary("raylib");
+    // exe.addLibraryPath();
     exe.linkSystemLibrary("c");
 
     b.installArtifact(exe);

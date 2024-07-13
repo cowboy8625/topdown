@@ -79,9 +79,9 @@ fn generateChunk(alloc: Allocator, pos: rl.Vector2(i32)) !*Self {
             }
 
             if (color.g > 195 and color.b > 195 and color.a > 195) {
-                try map.put(world_pos.add(pixel), .Dirt);
-            } else if (color.r > 185 and color.g > 185 and color.b > 185 and color.a > 185) {
                 try map.put(world_pos.add(pixel), .Grass);
+            } else if (color.r > 185 and color.g > 185 and color.b > 185 and color.a > 185) {
+                try map.put(world_pos.add(pixel), .Dirt);
             } else {
                 try map.put(world_pos.add(pixel), .Stone);
             }

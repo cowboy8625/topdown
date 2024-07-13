@@ -9,6 +9,7 @@ const Self = @This();
 
 const CENTER: rl.Vector2(f32) = CONSTANTS.CUBE.as(f32).div(2);
 current_pos: rl.Vector2(i32),
+velocity: rl.Vector2(i32) = .{ .x = 0, .y = 0 },
 animation: ?Interpolation = null,
 
 pub fn init() Self {
