@@ -7,7 +7,7 @@ const Chunk = @import("Chunk.zig");
 
 const Self = @This();
 
-const CENTER: rl.Vector2(f32) = CONSTANTS.CUBE.as(f32).divFromNum(2);
+const CENTER: rl.Vector2(f32) = CONSTANTS.CUBE.as(f32).div(2);
 current_pos: rl.Vector2(i32),
 animation: ?Interpolation = null,
 
@@ -25,10 +25,6 @@ pub fn getWorldPos(self: *const Self) rl.Vector2(f32) {
     return utils.get_world_pos_from_grid(i32, self.current_pos, CONSTANTS.CUBE);
 }
 
-pub fn getChunkPos(self: *const Self) rl.Vector2(i32) {
-    return self.current_pos.divFromNum(Chunk.SIZE);
-}
-
 pub fn move(self: *Self, dir: rl.Vector2(i32)) void {
     if (dir.isZero()) return;
     const start = self.current_pos;
@@ -39,6 +35,7 @@ pub fn move(self: *Self, dir: rl.Vector2(i32)) void {
     self.current_pos = end;
 }
 
+// Center of Player
 pub fn center(self: *const Self) rl.Vector2(f32) {
     return self.current_pos.mul(CONSTANTS.CUBE).as(f32).add(Self.CENTER);
 }
