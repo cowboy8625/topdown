@@ -62,12 +62,86 @@ pub fn deinit(self: *Self) void {
     self.alloc.destroy(self);
 }
 
+pub fn update(self: *Self) !void {
+    if (!self.isDirty) {
+        return;
+    }
+    try self.saveChunkToFile();
+}
+
+fn saveChunkToFile(self: *Self) !void {
+    const name_buffer = try self.alloc.alloc(u8, 32);
+    defer self.alloc.free(name_buffer);
+    const name = try std.fmt.bufPrint(name_buffer, "data/chunk_{d}_{d}.json", .{ self.pos.x, self.pos.y });
+    var file = try std.fs.cwd().createFile(name, .{});
+    defer file.close();
+
+    const options = std.json.StringifyOptions{
+        .whitespace = .indent_2,
+    };
+
+    try std.json.stringify(self, options, file.writer());
+
+    self.isDirty = false;
+}
+
+pub fn jsonStringify(self: Self, stream: anytype) !void {
+    const data = self.alloc.alloc(BlockData, self.map.count()) catch unreachable;
+    defer self.alloc.free(data);
+    var iter = self.map.iterator();
+    var i: usize = 0;
+    while (iter.next()) |entry| {
+        data[i] = .{
+            .x = entry.key_ptr.x,
+            .y = entry.key_ptr.y,
+            .blockType = entry.value_ptr.*,
+        };
+        i += 1;
+    }
+    const chunk_data = ChunkData{
+        .x = self.pos.x,
+        .y = self.pos.y,
+        .data = data,
+    };
+    try stream.write(chunk_data);
+}
+
+pub fn jsonParse(allocator: Allocator, source: anytype, options: std.json.ParseOptions) !*Self {
+    const parsed = std.json.parseFromSlice(ChunkData, allocator, source, options) catch |err| {
+        std.debug.print("Error: {any}", .{err});
+        return err;
+    };
+    defer parsed.deinit();
+    const chunk = parsed.value;
+    const chunk_pos = rl.Vector2(i32).init(chunk.x, chunk.y);
+
+    var map = BlockMap.init(allocator);
+    errdefer map.deinit();
+    for (chunk.data) |data| {
+        const pos = rl.Vector2(i32).init(data.x, data.y);
+        try map.put(pos, data.blockType);
+    }
+
+    const self = try allocator.create(Self);
+    errdefer allocator.destroy(self);
+
+    self.* = .{
+        .pos = chunk_pos,
+        .map = map,
+        .alloc = allocator,
+    };
+
+    return self;
+}
+
 pub fn replaceBlock(self: *Self, pos: rl.Vector2(i32), block: BlockType) !void {
     try self.map.put(pos, block);
+    self.isDirty = true;
 }
 
 pub fn deleteBlock(self: *Self, pos: rl.Vector2(i32)) void {
     _ = self.map.remove(pos);
+    self.isDirty = true;
 }
 
 pub fn getBlock(self: *const Self, pos: rl.Vector2(i32)) ?BlockType {

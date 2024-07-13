@@ -195,7 +195,15 @@ fn generateNextChunk(
     return .{ .chunk = new, .unload = unload };
 }
 
+pub fn updateChunks(self: *Self) !void {
+    var iter = self.map.iterator();
+    while (iter.next()) |chunk| {
+        try chunk.value.*.update();
+    }
+}
+
 pub fn update(self: *Self, pos: rl.Vector2(i32)) !void {
+    try self.updateChunks();
     const chunk = self.getChunkFromPos(pos) orelse return;
     if (chunk.key == .Five) {
         return;
