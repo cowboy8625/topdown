@@ -1,10 +1,11 @@
 const std = @import("std");
-const rl = @import("raylib_zig");
+const rl = @import("raylib");
+const Vector2 = @import("Vector2.zig").Vector2;
 
 const Self = @This();
-start: rl.Vector2(f32),
-end: rl.Vector2(f32),
-current: rl.Vector2(f32),
+start: Vector2(f32),
+end: Vector2(f32),
+current: Vector2(f32),
 time: f32,
 elapsedTime: f32,
 duration: f32,

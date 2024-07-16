@@ -1,5 +1,6 @@
 const std = @import("std");
-const rl = @import("raylib_zig");
+const rl = @import("raylib");
+const Vector2 = @import("Vector2.zig").Vector2;
 const CONSTANTS = @import("constants.zig");
 
 pub const BlockType = enum {
@@ -9,16 +10,16 @@ pub const BlockType = enum {
 
     pub fn color(self: BlockType) rl.Color {
         return switch (self) {
-            .Stone => rl.Color.lightGray(),
-            .Dirt => rl.Color.brown(),
-            .Grass => rl.Color.green(),
+            .Stone => rl.Color.light_gray,
+            .Dirt => rl.Color.brown,
+            .Grass => rl.Color.green,
         };
     }
 
-    pub fn draw(self: *const BlockType, pos: rl.Vector2(f32)) void {
-        rl.DrawRectangleV(
-            pos,
-            CONSTANTS.CUBE.as(f32),
+    pub fn draw(self: *const BlockType, pos: Vector2(f32)) void {
+        rl.drawRectangleV(
+            pos.asRaylibVector2(),
+            CONSTANTS.CUBE.as(f32).asRaylibVector2(),
             self.color(),
         );
     }

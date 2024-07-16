@@ -1,11 +1,12 @@
 const std = @import("std");
-const rl = @import("raylib_zig");
+const rl = @import("raylib");
 const cast = std.math.cast;
 const CONSTANTS = @import("constants.zig");
 const utils = @import("utils.zig");
 const Allocator = std.mem.Allocator;
 const BlockType = @import("BlockType.zig").BlockType;
-const BlockMap = std.AutoHashMap(rl.Vector2(i32), BlockType);
+const BlockMap = std.AutoHashMap(Vector2(i32), BlockType);
+const Vector2 = @import("Vector2.zig").Vector2;
 
 pub const SIZE: i32 = 32;
 
@@ -23,16 +24,16 @@ const BlockData = struct {
     blockType: BlockType,
 };
 
-pos: rl.Vector2(i32),
+pos: Vector2(i32),
 map: BlockMap,
 alloc: Allocator,
 isDirty: bool = false,
 
-pub fn init(alloc: Allocator, pos: rl.Vector2(i32)) !*Self {
+pub fn init(alloc: Allocator, pos: Vector2(i32)) !*Self {
     return loadChunk(alloc, pos) catch try generateChunk(alloc, pos);
 }
 
-fn loadChunk(alloc: Allocator, pos: rl.Vector2(i32)) !*Self {
+fn loadChunk(alloc: Allocator, pos: Vector2(i32)) !*Self {
     const name_buffer = try alloc.alloc(u8, 32);
     defer alloc.free(name_buffer);
     const name = try std.fmt.bufPrint(name_buffer, "data/chunk_{d}_{d}.json", .{ pos.x, pos.y });
@@ -47,29 +48,29 @@ fn loadChunk(alloc: Allocator, pos: rl.Vector2(i32)) !*Self {
     return try jsonParse(alloc, string, .{});
 }
 
-fn generateChunk(alloc: Allocator, pos: rl.Vector2(i32)) !*Self {
+fn generateChunk(alloc: Allocator, pos: Vector2(i32)) !*Self {
     const self = try alloc.create(Self);
     errdefer alloc.destroy(self);
 
     var map = BlockMap.init(alloc);
     errdefer map.deinit();
 
-    const dimension = rl.Vector2(i32).init(SIZE, SIZE);
+    const dimension = Vector2(i32).init(SIZE, SIZE);
     const world_pos = pos.mul(dimension);
 
-    const image = rl.GenImagePerlinNoise(
+    const image = rl.genImagePerlinNoise(
         dimension.x,
         dimension.y,
         world_pos.x,
         world_pos.y,
         1.0,
     );
-    defer rl.UnloadImage(image);
+    defer rl.unloadImage(image);
 
     for (0..cast(usize, image.width) orelse 0) |x| {
         for (0..cast(usize, image.height) orelse 0) |y| {
-            const pixel = rl.Vector2(usize).init(x, y).as(i32);
-            const color = rl.GetImageColorV(image, pixel);
+            const pixel = Vector2(usize).init(x, y).as(i32);
+            const color = rl.getImageColor(image, pixel.x, pixel.y);
             const r: bool = color.r > 128;
             const g: bool = color.g > 128;
             const b: bool = color.b > 128;
@@ -153,12 +154,12 @@ pub fn jsonParse(allocator: Allocator, source: anytype, options: std.json.ParseO
     };
     defer parsed.deinit();
     const chunk = parsed.value;
-    const chunk_pos = rl.Vector2(i32).init(chunk.x, chunk.y);
+    const chunk_pos = Vector2(i32).init(chunk.x, chunk.y);
 
     var map = BlockMap.init(allocator);
     errdefer map.deinit();
     for (chunk.data) |data| {
-        const pos = rl.Vector2(i32).init(data.x, data.y);
+        const pos = Vector2(i32).init(data.x, data.y);
         try map.put(pos, data.blockType);
     }
 
@@ -174,22 +175,25 @@ pub fn jsonParse(allocator: Allocator, source: anytype, options: std.json.ParseO
     return self;
 }
 
-pub fn replaceBlock(self: *Self, pos: rl.Vector2(i32), block: BlockType) !void {
+pub fn replaceBlock(self: *Self, pos: Vector2(i32), block: BlockType) !void {
     try self.map.put(pos, block);
     self.isDirty = true;
 }
 
-pub fn deleteBlock(self: *Self, pos: rl.Vector2(i32)) void {
-    _ = self.map.remove(pos);
-    self.isDirty = true;
+pub fn deleteBlock(self: *Self, pos: Vector2(i32)) ?BlockType {
+    if (self.map.get(pos)) |block| {
+        _ = self.map.remove(pos);
+        self.isDirty = true;
+        return block;
+    }
+    return null;
 }
 
-pub fn getBlock(self: *const Self, pos: rl.Vector2(i32)) ?BlockType {
+pub fn getBlock(self: *const Self, pos: Vector2(i32)) ?BlockType {
     return self.map.get(pos);
 }
 
 pub fn draw(self: *const Self) void {
-    const size = rl.Vector2(i32).init(SIZE, SIZE);
     var iter = self.map.iterator();
     while (iter.next()) |entry| {
         const block = entry.value_ptr.*;
@@ -197,13 +201,17 @@ pub fn draw(self: *const Self) void {
         block.draw(
             block_pos.mul(CONSTANTS.CUBE).as(f32),
         );
-        // Outliner
-        // rl.DrawRectangleLinesV(block_pos.mul(CONSTANTS.CUBE), CONSTANTS.CUBE, rl.Color.blue());
     }
-    const world_chunk_pos = self.pos.mul(size).mul(CONSTANTS.CUBE).as(f32);
-    rl.DrawRectangleLinesV(world_chunk_pos.as(i32), CONSTANTS.CUBE.mul(size), rl.Color.red());
 }
 
-fn getWorldPosOfChunk(position: rl.Vector2(i32)) rl.Vector2(f32) {
+pub fn drawOutline(self: *const Self) void {
+    const size = Vector2(i32).init(SIZE, SIZE);
+    const world_chunk_pos = self.pos.mul(size).mul(CONSTANTS.CUBE).as(f32);
+    const pos = world_chunk_pos.as(i32);
+    const dim = CONSTANTS.CUBE.mul(size);
+    rl.drawRectangleLines(pos.x, pos.y, dim.x, dim.y, rl.Color.red);
+}
+
+fn getWorldPosOfChunk(position: Vector2(i32)) Vector2(f32) {
     return position.mul(.{ .x = SIZE, .y = SIZE }).mul(CONSTANTS.CUBE).as(f32);
 }

@@ -1,8 +1,9 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
-const rl = @import("raylib_zig");
+const rl = @import("raylib");
 const BlockType = @import("BlockType.zig").BlockType;
 const Chunk = @import("Chunk.zig");
+const Vector2 = @import("Vector2.zig").Vector2;
 
 const Self = @This();
 
@@ -16,6 +17,10 @@ pub const ChunkId = enum {
     Seven,
     Eight,
     Nine,
+};
+
+const DrawOptions = struct {
+    showChunkBoards: bool = false,
 };
 
 const ChunkMap = std.EnumArray(ChunkId, *Chunk);
@@ -47,29 +52,29 @@ pub fn deinit(self: *Self) void {
     }
 }
 
-pub fn isCollision(self: *Self, player: rl.Vector2(i32), direction: rl.Vector2(i32)) bool {
+pub fn isCollision(self: *Self, player: Vector2(i32), direction: Vector2(i32)) bool {
     const location = player.add(direction);
     return self.contains(location);
 }
 
-pub fn contains(self: *Self, pos: rl.Vector2(i32)) bool {
+pub fn contains(self: *Self, pos: Vector2(i32)) bool {
     const chunk = self.getChunkFromPos(pos) orelse return false;
     return chunk.value.map.contains(pos);
 }
 
-pub fn replaceBlock(self: *Self, pos: rl.Vector2(i32), block: BlockType) !void {
+pub fn replaceBlock(self: *Self, pos: Vector2(i32), block: BlockType) !void {
     const chunk = self.getChunkFromPos(pos) orelse return;
     try chunk.value.replaceBlock(pos, block);
 }
 
-pub fn deleteBlock(self: *Self, pos: rl.Vector2(i32)) !void {
-    const chunk = self.getChunkFromPos(pos) orelse return;
-    chunk.value.deleteBlock(pos);
+pub fn deleteBlock(self: *Self, pos: Vector2(i32)) ?BlockType {
+    const chunk = self.getChunkFromPos(pos) orelse return null;
+    return chunk.value.deleteBlock(pos);
 }
 
-fn getChunkFromPos(self: *Self, pos: rl.Vector2(i32)) ?struct { key: ChunkId, value: *Chunk } {
+fn getChunkFromPos(self: *Self, pos: Vector2(i32)) ?struct { key: ChunkId, value: *Chunk } {
     var iter = self.map.iterator();
-    const size = rl.Vector2(i32).init(Chunk.SIZE, Chunk.SIZE);
+    const size = Vector2(i32).init(Chunk.SIZE, Chunk.SIZE);
     const p = pos.div(size);
     while (iter.next()) |*entry| {
         const chunk_pos = entry.value.*.pos;
@@ -85,7 +90,7 @@ fn generateNextChunk(
     self: *Self,
     current: ChunkId,
     to: ChunkId,
-    pos: rl.Vector2(i32),
+    pos: Vector2(i32),
 ) !struct { chunk: *Chunk, unload: bool } {
     const unload = switch (current) {
         .One => switch (to) {
@@ -202,7 +207,7 @@ pub fn updateChunks(self: *Self) !void {
     }
 }
 
-pub fn update(self: *Self, pos: rl.Vector2(i32)) !void {
+pub fn update(self: *Self, pos: Vector2(i32)) !void {
     try self.updateChunks();
     const chunk = self.getChunkFromPos(pos) orelse return;
     if (chunk.key == .Five) {
@@ -232,19 +237,22 @@ pub fn update(self: *Self, pos: rl.Vector2(i32)) !void {
     }
 }
 
-pub fn draw(self: *Self) void {
+pub fn draw(self: *Self, options: DrawOptions) void {
     var iter = self.map.iterator();
     while (iter.next()) |entry| {
         entry.value.*.draw();
+        if (options.showChunkBoards) {
+            entry.value.*.drawOutline();
+        }
     }
 }
 
-fn createNewChunk(alloc: Allocator, id: ChunkId, pos: rl.Vector2(i32)) !*Chunk {
+fn createNewChunk(alloc: Allocator, id: ChunkId, pos: Vector2(i32)) !*Chunk {
     return try Chunk.init(alloc, getChunkPosFromBase(id, pos));
 }
 
-fn getChunkPosFromBase(chunk_id: ChunkId, pos: rl.Vector2(i32)) rl.Vector2(i32) {
-    const offset: rl.Vector2(i32) = switch (chunk_id) {
+fn getChunkPosFromBase(chunk_id: ChunkId, pos: Vector2(i32)) Vector2(i32) {
+    const offset: Vector2(i32) = switch (chunk_id) {
         .One => .{ .x = -1, .y = -1 },
         .Two => .{ .x = 0, .y = -1 },
         .Three => .{ .x = 1, .y = -1 },
