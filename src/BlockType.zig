@@ -18,8 +18,8 @@ pub const BlockType = enum {
 
     pub fn draw(self: *const BlockType, pos: Vector2(f32)) void {
         rl.drawRectangleV(
-            pos.asRaylibVector2(),
-            CONSTANTS.CUBE.as(f32).asRaylibVector2(),
+            pos.as(rl.Vector2),
+            CONSTANTS.CUBE.as(f32).as(rl.Vector2),
             self.color(),
         );
     }

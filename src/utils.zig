@@ -53,3 +53,7 @@ pub fn dbg(item: anytype) @TypeOf(item) {
     std.debug.print("{any}\n", .{item});
     return item;
 }
+
+pub fn getCenterScreen() Vector2(f32) {
+    return .{ .x = cast(f32, rl.getScreenWidth()) / 2, .y = cast(f32, rl.getScreenHeight()) / 2 };
+}

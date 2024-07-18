@@ -12,6 +12,15 @@ const Chunk = @import("Chunk.zig");
 const BlockType = @import("BlockType.zig").BlockType;
 const World = @import("World.zig");
 
+test {
+    _ = @import("BlockType.zig");
+    _ = @import("Chunk.zig");
+    _ = @import("Interpolation.zig");
+    _ = @import("Player.zig");
+    _ = @import("Vector2.zig");
+    _ = @import("World.zig");
+}
+
 const Mode = enum { Game, Pause, Menu };
 
 const State = struct {
@@ -73,7 +82,7 @@ pub fn main() !void {
             .Menu => {},
         }
 
-        camera.target = player.getWorldPos().asRaylibVector2();
+        camera.target = player.getWorldPos().as(rl.Vector2);
         rl.beginDrawing();
         defer rl.endDrawing();
         rl.clearBackground(CONSTANTS.BACKGROUND_COLOR);
@@ -81,11 +90,11 @@ pub fn main() !void {
         defer rl.endMode2D();
 
         world.draw(.{ .showChunkBoards = state.debug_mode });
-        player.draw(&camera);
+        try player.draw(&camera);
         switch (state.mode) {
             .Game => {},
             .Pause => {
-                const center = get_center_screen();
+                const center = utils.getCenterScreen();
                 const text_width = rl.measureText("PAUSED", 20);
                 const screen_center = .{
                     .x = center.x - cast(f32, @divFloor(text_width, 2)),
@@ -96,11 +105,11 @@ pub fn main() !void {
             },
             .Menu => {},
         }
-        // draw_grid(&player, &camera, screen_width, screen_height);
+        // drawGrid(&player, &camera, screen_width, screen_height);
 
         // UI DRAW ON TOP OF EVERYTHING
         if (state.debug_mode) {
-            try draw_info(&cursor, &camera, display_cords_buffer, &player);
+            try drawInfo(&cursor, &camera, display_cords_buffer, &player);
         }
     }
 }
@@ -181,7 +190,7 @@ fn keyboard_update_game(
     // PLACING BLOCK
     if (rl.isMouseButtonPressed(rl.MouseButton.mouse_button_left)) {
         const world_mouse_pos = Vector2(f32).fromRaylibVevtor2(rl.getScreenToWorld2D(
-            cursor.*.asRaylibVector2(),
+            cursor.*.as(rl.Vector2),
             camera.*,
         ));
         const block_pos = get_grid_pos(f32, world_mouse_pos, CONSTANTS.CUBE.as(f32));
@@ -195,7 +204,7 @@ fn keyboard_update_game(
     if (rl.isMouseButtonPressed(rl.MouseButton.mouse_button_right)) {
         const world_mouse_pos = Vector2(f32).fromRaylibVevtor2(
             rl.getScreenToWorld2D(
-                cursor.*.asRaylibVector2(),
+                cursor.*.as(rl.Vector2),
                 camera.*,
             ),
         );
@@ -213,10 +222,6 @@ fn keyboard_update_pause(state: *State) !void {
     }
 }
 
-fn get_center_screen() Vector2(f32) {
-    return .{ .x = cast(f32, rl.getScreenWidth()) / 2, .y = cast(f32, rl.getScreenHeight()) / 2 };
-}
-
 /// Takes a Vector(T) and returns the nearest point on the grid as Vector(i32)
 fn get_grid_pos(comptime T: type, pos: Vector2(T), cell: Vector2(T)) Vector2(i32) {
     return pos.div(cell).as(i32);
@@ -232,7 +237,7 @@ fn get_direction(point: Vector2(f32), cursor: *const Vector2(f32), camera: *rl.C
     return .{ .x = std.math.cos(radians), .y = std.math.sin(radians) };
 }
 
-fn draw_info(
+fn drawInfo(
     cursor: *const Vector2(f32),
     camera: *rl.Camera2D,
     buffer: []u8,
@@ -244,7 +249,7 @@ fn draw_info(
     const display_cords = try std.fmt.bufPrintZ(buffer[0..], "pos: x: {d} y: {d}", .{ player.current_pos.x, player.current_pos.y });
     rl.drawText(display_cords, cast(i32, offset.x), cast(i32, offset.y), 30, CONSTANTS.UI_TEXT_COLOR);
     // ----Cursor Position-----
-    const screen_mouse = Vector2(f32).fromRaylibVevtor2(rl.getScreenToWorld2D(cursor.*.asRaylibVector2(), camera.*)).as(i32);
+    const screen_mouse = Vector2(f32).fromRaylibVevtor2(rl.getScreenToWorld2D(cursor.*.as(rl.Vector2), camera.*)).as(i32);
     const cursor_at_block_pos = get_grid_pos(i32, screen_mouse, CONSTANTS.CUBE);
     const x = cursor_at_block_pos.x;
     const y = cursor_at_block_pos.y;
@@ -258,17 +263,19 @@ fn draw_info(
     );
 }
 
-// fn draw_grid(player: *Player, camera: *rl.Camera2D, width: i32, height: i32) void {
+// fn drawGrid(player: *Player, camera: *rl.Camera2D, width: i32, height: i32) void {
 //     const pos = Vector2(f32).init(
 //         @mod(camera.offset.x, CONSTANTS.CELL_SIZE) - CONSTANTS.CELL_SIZE,
 //         @mod(camera.offset.y, CONSTANTS.CELL_SIZE) - CONSTANTS.CELL_SIZE,
 //     );
 //     const player_offset = player.current_pos.sub(player.current_pos.div(CONSTANTS.CUBE).mul(CONSTANTS.CUBE)).as(i32);
-//     const offset = rl.GetScreenToWorld2D(pos.mul(CONSTANTS.CUBE.as(f32)), camera.*).as(i32);
+//     const offset = Vector2(f32).fromRaylibVevtor2(
+//         rl.getScreenToWorld2D(pos.mul(CONSTANTS.CUBE.as(f32)).as(rl.Vector2), camera.*),
+//     ).as(i32);
 //
 //     var x: i32 = 0;
 //     while (x < width + CONSTANTS.CELL_SIZE) : (x += CONSTANTS.CELL_SIZE) {
-//         rl.DrawLine(
+//         rl.drawLine(
 //             x + offset.x - player_offset.x,
 //             offset.y - CONSTANTS.CELL_SIZE - player_offset.y,
 //             x + offset.x - player_offset.x,
@@ -278,7 +285,7 @@ fn draw_info(
 //     }
 //     var y: i32 = 0;
 //     while (y < height + CONSTANTS.CELL_SIZE) : (y += CONSTANTS.CELL_SIZE) {
-//         rl.DrawLine(
+//         rl.drawLine(
 //             offset.x - CONSTANTS.CELL_SIZE - player_offset.x,
 //             y + offset.y - player_offset.y,
 //             offset.x + width + CONSTANTS.CELL_SIZE - player_offset.x,

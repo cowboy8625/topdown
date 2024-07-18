@@ -86,15 +86,15 @@ pub fn update(self: *Self, deltaTime: f32) void {
     }
 }
 
-pub fn draw(self: Self, camera: *rl.Camera2D) void {
-    self.inventory.draw(camera);
-    const dim = CONSTANTS.CUBE.as(f32).asRaylibVector2();
+pub fn draw(self: Self, camera: *rl.Camera2D) !void {
+    try self.inventory.draw(camera);
+    const dim = CONSTANTS.CUBE.as(f32).as(rl.Vector2);
     if (self.animation) |_| {
-        const pos = self.getWorldPos().asRaylibVector2();
+        const pos = self.getWorldPos().as(rl.Vector2);
         rl.drawRectangleV(pos, dim, rl.Color.red);
         return;
     }
 
-    const pos = utils.get_world_pos_from_grid(i32, self.current_pos, CONSTANTS.CUBE).asRaylibVector2();
+    const pos = utils.get_world_pos_from_grid(i32, self.current_pos, CONSTANTS.CUBE).as(rl.Vector2);
     rl.drawRectangleV(pos, dim, rl.Color.red);
 }

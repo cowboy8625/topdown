@@ -27,12 +27,6 @@ pub fn Vector2(comptime T: type) type {
             return .{ .x = vec.x, .y = vec.y };
         }
 
-        pub fn as(self: Self, comptime U: type) Vector2(U) {
-            const x: U = utils.numberCast(T, U, self.x);
-            const y: U = utils.numberCast(T, U, self.y);
-            return .{ .x = x, .y = y };
-        }
-
         pub fn isZero(self: Self) bool {
             return self.x == 0 and self.y == 0;
         }
@@ -98,10 +92,27 @@ pub fn Vector2(comptime T: type) type {
         }
 
         /// Returns a raylib Vector2 f32
-        pub fn asRaylibVector2(self: Self) rl.Vector2 {
+        fn asRaylibVector2(self: Self) rl.Vector2 {
             const x: f32 = utils.numberCast(T, f32, self.x);
             const y: f32 = utils.numberCast(T, f32, self.y);
             return .{ .x = x, .y = y };
         }
+
+        pub fn as(self: Self, comptime U: type) if (U == rl.Vector2) rl.Vector2 else Vector2(U) {
+            switch (U) {
+                rl.Vector2 => return self.asRaylibVector2(),
+                else => {
+                    const x: U = utils.numberCast(T, U, self.x);
+                    const y: U = utils.numberCast(T, U, self.y);
+                    return .{ .x = x, .y = y };
+                },
+            }
+        }
     };
+}
+
+test "as rl.Vector2" {
+    const vector = Vector2(i32).init(1, 2).as(rl.Vector2);
+    const raylibVector = rl.Vector2.init(1, 2);
+    try std.testing.expectEqualDeep(vector, raylibVector);
 }
