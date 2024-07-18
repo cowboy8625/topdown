@@ -42,11 +42,11 @@ pub fn remove(self: *Self, index: usize) ?BlockType {
     if (index >= self.items.items.len) return null;
     const stack = &self.items.items[index];
     if (stack.count == 1) {
+        const block = stack.item;
         _ = self.items.orderedRemove(index);
-        return stack.item;
+        return block;
     }
     stack.count -= 1;
-    std.debug.print("removing {d}\n", .{stack.count});
     return stack.item;
 }
 
@@ -67,7 +67,7 @@ pub fn draw(self: *const Self, camera: *rl.Camera2D) !void {
         );
 
         const text = try std.fmt.bufPrintZ(buf, "{}", .{stack.count});
-        rl.drawText(text, @intFromFloat(pos.x + size.x - 5), @intFromFloat(pos.y + size.y / 2), 10, rl.Color.orange);
+        rl.drawText(text, @intFromFloat(pos.x + size.x - 15), @intFromFloat(pos.y + size.y / 2), 20, rl.Color.orange);
 
         pos.x += size.x + 10;
     }
