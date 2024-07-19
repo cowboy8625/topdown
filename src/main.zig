@@ -35,9 +35,10 @@ pub fn main() !void {
 
     try std.fs.cwd().makePath("data");
 
-    const screen_width = 1920;
-    const screen_height = 1080;
-    rl.initWindow(screen_width, screen_height, "raylib zig template");
+    rl.initWindow(0, 0, "raylib zig template");
+    const monitor = rl.getCurrentMonitor();
+    const screen_width = rl.getMonitorWidth(monitor);
+    const screen_height = rl.getMonitorHeight(monitor);
     defer rl.closeWindow();
 
     // rl.setConfigFlags(@enumFromInt(@intFromEnum(rl.ConfigFlags.window_resizable)));
@@ -56,8 +57,8 @@ pub fn main() !void {
 
     var camera: rl.Camera2D = .{
         .offset = .{
-            .x = screen_width / 2 + CONSTANTS.CELL_SIZE,
-            .y = screen_height / 2 + CONSTANTS.CELL_SIZE,
+            .x = cast(f32, @divFloor(screen_width, 2) + CONSTANTS.CELL_SIZE),
+            .y = cast(f32, @divFloor(screen_height, 2) + CONSTANTS.CELL_SIZE),
         },
         .target = .{ .x = 0, .y = 0 },
         .rotation = 0,
@@ -69,7 +70,7 @@ pub fn main() !void {
     while (!rl.windowShouldClose()) {
         // UPDATE
 
-        const cursor = Vector2(f32).fromRaylibVevtor2(rl.getMousePosition());
+        const cursor = Vector2(f32).fromRaylibVector2(rl.getMousePosition());
         try keyboard_update(&cursor, &state, &player, &camera, &world);
 
         const deltaTime = rl.getFrameTime();
@@ -161,6 +162,13 @@ fn keyboard_update_game(
         player.velocity.y = 0;
     }
 
+    const mouseWheelY = rl.getMouseWheelMove();
+    if (mouseWheelY >= 1) {
+        player.moveHotbarSlotLeft();
+    } else if (mouseWheelY <= -1) {
+        player.moveHotbarSlotRight();
+    }
+
     var dir = Vector2(i32).init(0, 0);
 
     const x = player.velocity.x;
@@ -189,12 +197,13 @@ fn keyboard_update_game(
 
     // PLACING BLOCK
     if (rl.isMouseButtonPressed(rl.MouseButton.mouse_button_left)) {
-        const world_mouse_pos = Vector2(f32).fromRaylibVevtor2(rl.getScreenToWorld2D(
+        const world_mouse_pos = Vector2(f32).fromRaylibVector2(rl.getScreenToWorld2D(
             cursor.*.as(rl.Vector2),
             camera.*,
         ));
         const block_pos = get_grid_pos(f32, world_mouse_pos, CONSTANTS.CUBE.as(f32));
         if (block_pos.eq(player.current_pos)) return;
+        if (world.contains(block_pos.as(i32))) return;
         if (player.getItemFromActiveSlot()) |block| {
             try world.replaceBlock(block_pos.as(i32), block);
         }
@@ -202,7 +211,7 @@ fn keyboard_update_game(
 
     // DESTROYING BLOCK
     if (rl.isMouseButtonPressed(rl.MouseButton.mouse_button_right)) {
-        const world_mouse_pos = Vector2(f32).fromRaylibVevtor2(
+        const world_mouse_pos = Vector2(f32).fromRaylibVector2(
             rl.getScreenToWorld2D(
                 cursor.*.as(rl.Vector2),
                 camera.*,
@@ -210,6 +219,9 @@ fn keyboard_update_game(
         );
         const block_pos = get_grid_pos(f32, world_mouse_pos, CONSTANTS.CUBE.as(f32));
         if (block_pos.eq(player.current_pos)) return;
+        // FIXME: Remove this once item entity are implemented
+        if (player.isInventoryFull()) return;
+        // --------------------------
         if (world.deleteBlock(block_pos.as(i32))) |block| {
             try player.addToInventory(block);
         }
@@ -249,7 +261,7 @@ fn drawInfo(
     const display_cords = try std.fmt.bufPrintZ(buffer[0..], "pos: x: {d} y: {d}", .{ player.current_pos.x, player.current_pos.y });
     rl.drawText(display_cords, cast(i32, offset.x), cast(i32, offset.y), 30, CONSTANTS.UI_TEXT_COLOR);
     // ----Cursor Position-----
-    const screen_mouse = Vector2(f32).fromRaylibVevtor2(rl.getScreenToWorld2D(cursor.*.as(rl.Vector2), camera.*)).as(i32);
+    const screen_mouse = Vector2(f32).fromRaylibVector2(rl.getScreenToWorld2D(cursor.*.as(rl.Vector2), camera.*)).as(i32);
     const cursor_at_block_pos = get_grid_pos(i32, screen_mouse, CONSTANTS.CUBE);
     const x = cursor_at_block_pos.x;
     const y = cursor_at_block_pos.y;
@@ -269,7 +281,7 @@ fn drawInfo(
 //         @mod(camera.offset.y, CONSTANTS.CELL_SIZE) - CONSTANTS.CELL_SIZE,
 //     );
 //     const player_offset = player.current_pos.sub(player.current_pos.div(CONSTANTS.CUBE).mul(CONSTANTS.CUBE)).as(i32);
-//     const offset = Vector2(f32).fromRaylibVevtor2(
+//     const offset = Vector2(f32).fromRaylibVector2(
 //         rl.getScreenToWorld2D(pos.mul(CONSTANTS.CUBE.as(f32)).as(rl.Vector2), camera.*),
 //     ).as(i32);
 //

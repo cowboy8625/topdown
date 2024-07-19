@@ -3,6 +3,7 @@ const rl = @import("raylib");
 const Vector2 = @import("Vector2.zig").Vector2;
 const Allocator = std.mem.Allocator;
 const utils = @import("utils.zig");
+const cast = utils.cast;
 const Interpolation = @import("Interpolation.zig");
 const CONSTANTS = @import("constants.zig");
 const Chunk = @import("Chunk.zig");
@@ -30,8 +31,36 @@ pub fn deinit(self: *Self) void {
     self.inventory.deinit();
 }
 
+pub fn moveHotbarSlotLeft(self: *Self) void {
+    if (self.right_hand == 0) {
+        self.right_hand = Inventory.MAX_HOTBAR_SLOTS - 1;
+        return;
+    }
+    self.right_hand -= 1;
+}
+
+pub fn moveHotbarSlotRight(self: *Self) void {
+    if (self.right_hand == Inventory.MAX_HOTBAR_SLOTS - 1) {
+        self.right_hand = 0;
+        return;
+    }
+    self.right_hand += 1;
+}
+
+pub fn setHotbarSlot(self: *Self, index: usize) void {
+    if (index >= Inventory.MAX_HOTBAR_SLOTS) {
+        self.right_hand = Inventory.MAX_HOTBAR_SLOTS - 1;
+        return;
+    }
+    self.right_hand = index;
+}
+
 pub fn addToInventory(self: *Self, item: BlockType) !void {
     try self.inventory.add(item);
+}
+
+pub fn isInventoryFull(self: *const Self) bool {
+    return self.inventory.isInventoryFull();
 }
 
 pub fn getItemFromActiveSlot(self: *Self) ?BlockType {
@@ -87,7 +116,7 @@ pub fn update(self: *Self, deltaTime: f32) void {
 }
 
 pub fn draw(self: Self, camera: *rl.Camera2D) !void {
-    try self.inventory.draw(camera);
+    try self.inventory.draw(self.right_hand, camera);
     const dim = CONSTANTS.CUBE.as(f32).as(rl.Vector2);
     if (self.animation) |_| {
         const pos = self.getWorldPos().as(rl.Vector2);

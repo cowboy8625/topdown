@@ -23,7 +23,7 @@ pub fn Vector2(comptime T: type) type {
             return .{ .x = x, .y = y };
         }
 
-        pub fn fromRaylibVevtor2(vec: rl.Vector2) Vector2(T) {
+        pub fn fromRaylibVector2(vec: rl.Vector2) Vector2(T) {
             return .{ .x = vec.x, .y = vec.y };
         }
 
