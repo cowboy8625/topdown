@@ -19,7 +19,7 @@ pub const ChunkId = enum {
     Nine,
 };
 
-const DrawOptions = struct {
+pub const DrawOptions = struct {
     showChunkBoards: bool = false,
 };
 
@@ -54,22 +54,22 @@ pub fn deinit(self: *Self) void {
 
 pub fn isCollision(self: *Self, player: Vector2(i32), direction: Vector2(i32)) bool {
     const location = player.add(direction);
-    return self.contains(location);
+    const block = self.getBlock(location) orelse .Air;
+    std.debug.print("block: {s}\n", .{@tagName(block)});
+    return switch (block) {
+        .Air => false,
+        else => true,
+    };
 }
 
-pub fn contains(self: *Self, pos: Vector2(i32)) bool {
-    const chunk = self.getChunkFromPos(pos) orelse return false;
-    return chunk.value.map.contains(pos);
-}
-
-pub fn replaceBlock(self: *Self, pos: Vector2(i32), block: BlockType) !void {
-    const chunk = self.getChunkFromPos(pos) orelse return;
-    try chunk.value.replaceBlock(pos, block);
-}
-
-pub fn deleteBlock(self: *Self, pos: Vector2(i32)) ?BlockType {
+pub fn setBlock(self: *Self, pos: Vector2(i32), block: BlockType) ?BlockType {
     const chunk = self.getChunkFromPos(pos) orelse return null;
-    return chunk.value.deleteBlock(pos);
+    return chunk.value.setBlock(pos, block);
+}
+
+pub fn getBlock(self: *Self, pos: Vector2(i32)) ?BlockType {
+    const chunk = self.getChunkFromPos(pos) orelse return null;
+    return chunk.value.getBlock(pos);
 }
 
 fn getChunkFromPos(self: *Self, pos: Vector2(i32)) ?struct { key: ChunkId, value: *Chunk } {
@@ -240,10 +240,7 @@ pub fn update(self: *Self, pos: Vector2(i32)) !void {
 pub fn draw(self: *Self, options: DrawOptions) void {
     var iter = self.map.iterator();
     while (iter.next()) |entry| {
-        entry.value.*.draw();
-        if (options.showChunkBoards) {
-            entry.value.*.drawOutline();
-        }
+        entry.value.*.draw(options);
     }
 }
 

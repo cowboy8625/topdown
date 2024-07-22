@@ -24,7 +24,7 @@ pub fn Vector2(comptime T: type) type {
         }
 
         pub fn fromRaylibVector2(vec: rl.Vector2) Vector2(T) {
-            return .{ .x = vec.x, .y = vec.y };
+            return .{ .x = utils.cast(T, vec.x), .y = utils.cast(T, vec.y) };
         }
 
         pub fn isZero(self: Self) bool {
@@ -43,37 +43,37 @@ pub fn Vector2(comptime T: type) type {
             }
         }
 
-        pub fn sub(self: Self, other: Self) Self {
+        pub fn sub(self: Self, other: anytype) Self {
             switch (@TypeOf(other)) {
                 Self => {
                     return .{ .x = self.x - other.x, .y = self.y - other.y };
                 },
                 T, comptime_int => {
-                    return .{ .x = self.x + other, .y = self.y + other };
+                    return .{ .x = self.x - other, .y = self.y - other };
                 },
                 else => @compileError("Unsupported type " ++ @typeName(@TypeOf(other))),
             }
         }
 
-        pub fn mul(self: Self, other: Self) Self {
+        pub fn mul(self: Self, other: anytype) Self {
             switch (@TypeOf(other)) {
                 Self => {
                     return .{ .x = self.x * other.x, .y = self.y * other.y };
                 },
                 T, comptime_int => {
-                    return .{ .x = self.x + other, .y = self.y + other };
+                    return .{ .x = self.x * other, .y = self.y * other };
                 },
                 else => @compileError("Unsupported type " ++ @typeName(@TypeOf(other))),
             }
         }
 
-        pub fn div(self: Self, other: Self) Self {
+        pub fn div(self: Self, other: anytype) Self {
             switch (@TypeOf(other)) {
                 Self => {
                     return .{ .x = @divFloor(self.x, other.x), .y = @divFloor(self.y, other.y) };
                 },
                 T, comptime_int => {
-                    return .{ .x = self.x + other, .y = self.y + other };
+                    return .{ .x = self.x / other, .y = self.y / other };
                 },
                 else => @compileError("Unsupported type " ++ @typeName(@TypeOf(other))),
             }

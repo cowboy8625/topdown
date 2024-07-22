@@ -77,7 +77,7 @@ pub fn drawHotbar(self: *const Self, base_pos: rl.Vector2, scale: f32) rl.Vector
 }
 
 pub fn draw(self: *const Self, selectedSlot: usize, camera: *rl.Camera2D) !void {
-    const scale = 1;
+    const scale = 2;
     const font_size = 10 * scale;
     const pixels_between_slots = 10 * scale;
     const center_screen = utils.getCenterScreen().as(rl.Vector2);

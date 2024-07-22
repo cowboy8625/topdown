@@ -1,31 +1,28 @@
 const std = @import("std");
 const rl = @import("raylib");
-const cast = std.math.cast;
 const CONSTANTS = @import("constants.zig");
 const utils = @import("utils.zig");
+const cast = utils.cast;
+const indexFromVec = utils.indexFromVec;
 const Allocator = std.mem.Allocator;
 const BlockType = @import("BlockType.zig").BlockType;
 const BlockMap = std.AutoHashMap(Vector2(i32), BlockType);
 const Vector2 = @import("Vector2.zig").Vector2;
+const DrawOptions = @import("World.zig").DrawOptions;
 
-pub const SIZE: i32 = 32;
+pub const SIZE = 32;
+pub const VOLUME = SIZE * SIZE;
 
 const Self = @This();
 
 const ChunkData = struct {
     x: i32,
     y: i32,
-    data: []BlockData,
-};
-
-const BlockData = struct {
-    x: i32,
-    y: i32,
-    blockType: BlockType,
+    data: [VOLUME]BlockType,
 };
 
 pos: Vector2(i32),
-map: BlockMap,
+blocks: [VOLUME]BlockType,
 alloc: Allocator,
 isDirty: bool = false,
 
@@ -52,9 +49,6 @@ fn generateChunk(alloc: Allocator, pos: Vector2(i32)) !*Self {
     const self = try alloc.create(Self);
     errdefer alloc.destroy(self);
 
-    var map = BlockMap.init(alloc);
-    errdefer map.deinit();
-
     const dimension = Vector2(i32).init(SIZE, SIZE);
     const world_pos = pos.mul(dimension);
 
@@ -67,8 +61,10 @@ fn generateChunk(alloc: Allocator, pos: Vector2(i32)) !*Self {
     );
     defer rl.unloadImage(image);
 
-    for (0..cast(usize, image.width) orelse 0) |x| {
-        for (0..cast(usize, image.height) orelse 0) |y| {
+    var blocks = [_]BlockType{.Air} ** VOLUME;
+
+    for (0..cast(usize, image.width)) |x| {
+        for (0..cast(usize, image.height)) |y| {
             const pixel = Vector2(usize).init(x, y).as(i32);
             const color = rl.getImageColor(image, pixel.x, pixel.y);
             const r: bool = color.r > 128;
@@ -79,19 +75,20 @@ fn generateChunk(alloc: Allocator, pos: Vector2(i32)) !*Self {
                 continue;
             }
 
+            const index = y * SIZE + x;
             if (color.g > 195 and color.b > 195 and color.a > 195) {
-                try map.put(world_pos.add(pixel), .Grass);
+                blocks[index] = .Grass;
             } else if (color.r > 185 and color.g > 185 and color.b > 185 and color.a > 185) {
-                try map.put(world_pos.add(pixel), .Dirt);
+                blocks[index] = .Dirt;
             } else {
-                try map.put(world_pos.add(pixel), .Stone);
+                blocks[index] = .Stone;
             }
         }
     }
 
     self.* = .{
         .pos = pos,
-        .map = map,
+        .blocks = blocks,
         .alloc = alloc,
     };
 
@@ -99,7 +96,6 @@ fn generateChunk(alloc: Allocator, pos: Vector2(i32)) !*Self {
 }
 
 pub fn deinit(self: *Self) void {
-    self.map.deinit();
     self.alloc.destroy(self);
 }
 
@@ -127,22 +123,10 @@ fn saveChunkToFile(self: *Self) !void {
 }
 
 pub fn jsonStringify(self: Self, stream: anytype) !void {
-    const data = self.alloc.alloc(BlockData, self.map.count()) catch unreachable;
-    defer self.alloc.free(data);
-    var iter = self.map.iterator();
-    var i: usize = 0;
-    while (iter.next()) |entry| {
-        data[i] = .{
-            .x = entry.key_ptr.x,
-            .y = entry.key_ptr.y,
-            .blockType = entry.value_ptr.*,
-        };
-        i += 1;
-    }
     const chunk_data = ChunkData{
         .x = self.pos.x,
         .y = self.pos.y,
-        .data = data,
+        .data = self.blocks,
     };
     try stream.write(chunk_data);
 }
@@ -154,54 +138,30 @@ pub fn jsonParse(allocator: Allocator, source: anytype, options: std.json.ParseO
     };
     defer parsed.deinit();
     const chunk = parsed.value;
-    const chunk_pos = Vector2(i32).init(chunk.x, chunk.y);
-
-    var map = BlockMap.init(allocator);
-    errdefer map.deinit();
-    for (chunk.data) |data| {
-        const pos = Vector2(i32).init(data.x, data.y);
-        try map.put(pos, data.blockType);
-    }
 
     const self = try allocator.create(Self);
     errdefer allocator.destroy(self);
 
     self.* = .{
-        .pos = chunk_pos,
-        .map = map,
+        .pos = Vector2(i32).init(chunk.x, chunk.y),
+        .blocks = chunk.data,
         .alloc = allocator,
     };
 
     return self;
 }
 
-pub fn replaceBlock(self: *Self, pos: Vector2(i32), block: BlockType) !void {
-    try self.map.put(pos, block);
+pub fn setBlock(self: *Self, pos: Vector2(i32), block: BlockType) BlockType {
+    const index = indexFromVec(i32, pos, SIZE);
+    const old = self.blocks[index];
+    self.blocks[index] = block;
     self.isDirty = true;
+    return old;
 }
 
-pub fn deleteBlock(self: *Self, pos: Vector2(i32)) ?BlockType {
-    if (self.map.get(pos)) |block| {
-        _ = self.map.remove(pos);
-        self.isDirty = true;
-        return block;
-    }
-    return null;
-}
-
-pub fn getBlock(self: *const Self, pos: Vector2(i32)) ?BlockType {
-    return self.map.get(pos);
-}
-
-pub fn draw(self: *const Self) void {
-    var iter = self.map.iterator();
-    while (iter.next()) |entry| {
-        const block = entry.value_ptr.*;
-        const block_pos = entry.key_ptr.*;
-        block.draw(
-            block_pos.mul(CONSTANTS.CUBE).as(f32),
-        );
-    }
+pub fn getBlock(self: *const Self, pos: Vector2(i32)) BlockType {
+    const index = indexFromVec(i32, pos, SIZE);
+    return self.blocks[index];
 }
 
 pub fn drawOutline(self: *const Self) void {
@@ -212,6 +172,22 @@ pub fn drawOutline(self: *const Self) void {
     rl.drawRectangleLines(pos.x, pos.y, dim.x, dim.y, rl.Color.red);
 }
 
-fn getWorldPosOfChunk(position: Vector2(i32)) Vector2(f32) {
-    return position.mul(.{ .x = SIZE, .y = SIZE }).mul(CONSTANTS.CUBE).as(f32);
+pub fn getBlockPosFromIndex(index: usize) Vector2(i32) {
+    const x: i32 = @intCast(@mod(index, SIZE));
+    const y: i32 = @intCast(@divFloor(index, SIZE));
+    return Vector2(i32).init(x, y);
+}
+
+pub fn draw(self: *const Self, options: DrawOptions) void {
+    for (0.., self.blocks) |i, block| {
+        const local_pos = Self.getBlockPosFromIndex(i);
+        const pos = self.pos.mul(SIZE).add(local_pos);
+        block.draw(
+            pos.mul(CONSTANTS.CUBE).as(f32),
+        );
+    }
+    const is_even = @mod(self.pos.x, 2) == 0 and @mod(self.pos.y, 2) == 0;
+    if (options.showChunkBoards and is_even) {
+        self.drawOutline();
+    }
 }

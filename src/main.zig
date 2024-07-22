@@ -203,9 +203,9 @@ fn keyboard_update_game(
         ));
         const block_pos = get_grid_pos(f32, world_mouse_pos, CONSTANTS.CUBE.as(f32));
         if (block_pos.eq(player.current_pos)) return;
-        if (world.contains(block_pos.as(i32))) return;
+        // if (world.contains(block_pos.as(i32))) return;
         if (player.getItemFromActiveSlot()) |block| {
-            try world.replaceBlock(block_pos.as(i32), block);
+            _ = world.setBlock(block_pos.as(i32), block);
         }
     }
 
@@ -222,7 +222,7 @@ fn keyboard_update_game(
         // FIXME: Remove this once item entity are implemented
         if (player.isInventoryFull()) return;
         // --------------------------
-        if (world.deleteBlock(block_pos.as(i32))) |block| {
+        if (world.setBlock(block_pos.as(i32), .Air)) |block| {
             try player.addToInventory(block);
         }
     }

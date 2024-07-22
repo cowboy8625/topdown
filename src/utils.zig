@@ -57,3 +57,23 @@ pub fn dbg(item: anytype) @TypeOf(item) {
 pub fn getCenterScreen() Vector2(f32) {
     return .{ .x = cast(f32, rl.getScreenWidth()) / 2, .y = cast(f32, rl.getScreenHeight()) / 2 };
 }
+
+pub fn indexFromVec(comptime T: type, pos: Vector2(T), cell: i32) usize {
+    const p = pos.as(i32);
+    var is_neg = false;
+    const chunkX = @divFloor(p.x, cell);
+    const chunkY = @divFloor(p.y, cell);
+    if (chunkX < 0 or chunkY < 0) {
+        is_neg = true;
+    }
+    const localX = @mod(p.x, cell);
+    const localY = @mod(p.y, cell);
+    return indexFromCord(localX, localY, cell, cell, is_neg);
+}
+
+pub fn indexFromCord(x: i32, y: i32, w: i32, h: i32, is_neg: bool) usize {
+    if (is_neg) return @intCast((w * h) - 1);
+    const xx = if (x < 0) w + x - 1 else x;
+    const yy = if (y < 0) h + y - 1 else y;
+    return cast(usize, yy * w + xx);
+}

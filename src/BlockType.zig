@@ -4,12 +4,14 @@ const Vector2 = @import("Vector2.zig").Vector2;
 const CONSTANTS = @import("constants.zig");
 
 pub const BlockType = enum {
+    Air,
     Stone,
     Dirt,
     Grass,
 
     pub fn color(self: BlockType) rl.Color {
         return switch (self) {
+            .Air => rl.Color.init(0, 0, 0, 0),
             .Stone => rl.Color.light_gray,
             .Dirt => rl.Color.brown,
             .Grass => rl.Color.green,
